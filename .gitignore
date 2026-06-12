@@ -14,20 +14,30 @@
 
 secrets/
 credentials/
-app-env-backup*
+app-env-backup*/
+
+# Local server env backup / references
+server_env_backup_local/
+backend_env_backup_*/
+*_env_backup_*/
+*_backup_*/
+
 server_app_env_reference.txt
 server_compose_reference.yml
 server_bashrc_reference.txt
+printenv_current_session.txt
 
-# Server backup files
-backend_env_backup_*
-*_env_backup_*
-*_backup_*
+*_env.txt
+*_inspect.json
+
+# Archive / DB dump files
 *.tar
 *.tar.gz
 *.zip
 *.7z
 *.sql
+*.dump
+*.backup
 
 # =========================
 # Gradle / Java / Spring Boot
