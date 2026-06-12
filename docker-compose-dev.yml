@@ -1,0 +1,100 @@
+services:
+  # --- Application Service (New) ---
+  app:
+    container_name: "smarthealthdog_app"
+    image: your-gradle-app:dev # Use the image name and tag you built
+    # Use build if you want Docker Compose to build the image for you
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    environment:
+      # Activate the 'dev' Spring profile
+      SPRING_PROFILES_ACTIVE: dev
+      # Configure Spring Boot to connect to the PostgreSQL service
+      DB_HOST: postgres # Override for Docker internal network
+      DB_PORT: 5432     # Override for Docker internal network
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # Redis configuration
+      REDIS_HOST: redis # Override for Docker internal network
+      REDIS_PORT: 6379  # Override for Docker internal network
+      REDIS_PASSWORD: ${REDIS_PASSWORD}  # Redis 비밀번호 (필요시 설정)
+      # Flyway configuration
+      AI_MODEL_SERVICE_EMAIL: ${AI_MODEL_SERVICE_EMAIL}
+      AI_MODEL_SERVICE_PASSWORD_HASH: ${AI_MODEL_SERVICE_PASSWORD_HASH}
+      # AI Model Service configuration
+      INFERENCE_SERVICE_RETRY_MAX_ATTEMPTS: ${INFERENCE_SERVICE_RETRY_MAX_ATTEMPTS}
+      INFERENCE_SERVICE_TIMEOUT_SECONDS: ${INFERENCE_SERVICE_TIMEOUT_SECONDS}
+      INFERENCE_SERVICE_BATCH_SIZE: ${INFERENCE_SERVICE_BATCH_SIZE}
+      INFERENCE_SERVICE_INTERVAL_SECONDS: ${INFERENCE_SERVICE_INTERVAL_SECONDS}
+      # SMTP configuration
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_STARTTLS_ENABLE: ${SMTP_STARTTLS_ENABLE:-true}
+      SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-true}
+      SMTP_SSL_ENABLE: ${SMTP_SSL_ENABLE:-false}
+      ALLOWED_EMAILS_COMMA_SEPARATED: ${ALLOWED_EMAILS_COMMA_SEPARATED}
+      # Secret Keys
+      JWT_SECRET: ${JWT_SECRET}
+      EMAIL_VERIFICATION_SECRET: ${EMAIL_VERIFICATION_SECRET}
+      # AWS Configuration
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_CLOUDFRONT_DOMAIN: ${AWS_CLOUDFRONT_DOMAIN}
+      AWS_ENDPOINT: ${AWS_ENDPOINT}
+      # Local Storage Settings
+      LOCAL_RESOURCE_PATH: file:/app/uploads/
+      LOCAL_STORAGE_URL_PREFIX: ${LOCAL_STORAGE_URL_PREFIX}
+      AI_MODEL_SERVICE_URL_PREFIX: ${AI_MODEL_SERVICE_URL_PREFIX}
+
+    volumes:
+      - ./data/uploads:/app/uploads
+
+    depends_on:
+      postgres:
+        condition: service_healthy # Recommended for reliable startup
+      redis:
+        condition: service_started 
+    # Optional: If you want to run a custom command (like activating a different profile)
+    command: java -jar /app/app.jar --spring.profiles.active=dev
+
+  # --- Existing Services ---
+  postgres:
+    container_name: "postgres_smarthealthdog"
+    image: postgres:18.0
+    ports:
+      - "${DB_PORT}:5432"
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck: # Added a healthcheck for better integration with the 'app' service
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8.2.2-alpine
+    container_name: my-redis
+    restart: always
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--bind", "0.0.0.0"]
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:  # <-- This must match the name used above
+    driver: local

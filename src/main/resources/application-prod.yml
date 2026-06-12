@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: backend
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    user: postgres
+    password: ${DB_PASSWORD}
+    baseline-on-migrate: true
+    placeholders:
+      ai:
+        user:
+          email: ${AI_MODEL_SERVICE_EMAIL}
+          password-hash: ${AI_MODEL_SERVICE_PASSWORD_HASH}
+  mail:
+    host: ${SMTP_HOST}
+    username: ${SMTP_USER}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        transport:
+          protocol: smtp
+        smtp:
+          port: 25
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  quartz:
+    auto-startup: false
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.jobStore.class: org.springframework.scheduling.quartz.LocalDataSourceJobStore
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.clusterCheckinInterval: 10000
+      org.quartz.scheduler.instanceId: AUTO
+      org.quartz.scheduler.instanceName: ClusteredQuartzScheduler
+      org.quartz.threadPool.threadCount: 5
+  security:
+    oauth2:
+      client:
+        provider:
+          google:
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+          kakao:
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token:
+    expiration:
+      minutes: 15
+  refresh-token:
+    expiration:
+      days: 7
+    max-count: 10
+
+app:
+  mail:
+    from: ${SMTP_FROM}
+  token:
+    email-verification:
+      secret: ${EMAIL_VERIFICATION_SECRET}
+      # 이메일 인증 시도 최대 횟수
+      tries:
+        count: 5
+        duration:
+          days: 1
+      # 이메일 인증 토큰 당 실패 시도 최대 횟수
+      failure:
+        attempts: 5
+      # 이메일 인증 토큰 당 최대 실패 후 잠금 기간 (분)
+      lock:
+        duration:
+          minutes: 30
+      # 이메일 인증 토큰 만료 시간 (분)
+      expiration:
+        minutes: 15
+    password-reset:
+      expiration:
+        minutes: 15
+
+cloud:
+  aws:
+    region:
+      static: ${AWS_REGION}
+    credentials:
+      access-key: ${AWS_ACCESS_KEY}
+      secret-key: ${AWS_SECRET_KEY}
+    s3:
+      bucket: ${AWS_S3_BUCKET}
+    cloudfront:
+      domain: ${AWS_CLOUDFRONT_DOMAIN}
+
+local-storage:
+  local-resource-path: ${LOCAL_RESOURCE_PATH}
+
+inference-service:
+  retry:
+    max-attempts: ${INFERENCE_SERVICE_RETRY_MAX_ATTEMPTS}
+  timeout:
+    seconds: ${INFERENCE_SERVICE_TIMEOUT_SECONDS}
+  batch:
+    size: ${INFERENCE_SERVICE_BATCH_SIZE}
+  interval:
+    seconds: ${INFERENCE_SERVICE_INTERVAL_SECONDS} # 사용자가 무작위로 진단 요청을 보낼 때 AI 모델 서비스에 과부하가 걸리지 않도록 요청 간격을 조절하는 데 사용

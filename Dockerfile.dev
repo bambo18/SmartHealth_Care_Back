@@ -1,0 +1,39 @@
+# --- STAGE 1: BUILDER ---
+# Use a full JDK for compiling and building the application.
+FROM eclipse-temurin:24.0.2_12-jdk-alpine-3.22 AS builder
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the Gradle Wrapper files and configuration files for caching
+# These files define the build process and dependencies.
+COPY gradlew .
+COPY gradle /app/gradle
+COPY build.gradle settings.gradle ./
+
+# Copy the source code
+COPY src /app/src
+
+# Make the Gradle wrapper executable
+RUN chmod +x gradlew
+
+# Execute the Gradle build (builds the executable JAR in build/libs/)
+# --no-daemon ensures the build runs cleanly within the container.
+RUN ./gradlew build -x test
+
+# --- STAGE 2: RUNNER ---
+# Use a minimal JRE for running the application - much smaller and more secure.
+FROM eclipse-temurin:24.0.2_12-jre-alpine-3.22
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the built JAR artifact from the 'builder' stage
+# The name of the JAR is simplified to 'app.jar' in the container
+COPY --from=builder /app/build/libs/backend-*.jar app.jar
+
+# Expose the default Spring Boot port
+EXPOSE 8080
+
+# Command to run the Spring Boot application
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

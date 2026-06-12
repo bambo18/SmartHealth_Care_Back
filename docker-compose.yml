@@ -1,0 +1,40 @@
+services:
+  postgres:
+    container_name: "postgres_smarthealthdog"
+    image: postgres:18.0
+    ports:
+      - "${DB_PORT}:5432"
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${PG_DATABASE_PATH}:/var/lib/postgresql/data
+  redis:
+    image: redis:8.2.2-alpine
+    container_name: my-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ${REDIS_DATA_PATH}:/data
+
+  # localstack:
+  #   container_name: "localstack"
+  #   image: localstack/localstack
+  #   ports:
+  #     - "127.0.0.1:4510-4559:4510-4559"  # External services port ranges
+  #     - "127.0.0.1:4566:4566"            # LocalStack gateway port
+  #     - "127.0.0.1:8081:8080"            # LocalStack Web UI (if enabled)
+  #   environment:
+  #     # --- Existing and Required ---
+  #     - SERVICES=s3,cloudfront          # Enable S3 and CloudFront
+  #     - DEBUG=1
+      
+  #     # --- Suggested Additions for Best Practice ---
+  #     - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}           # Standard LocalStack access key
+  #     - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_KEY}       # Standard LocalStack secret key
+  #     - PERSISTENCE=1                    # Explicitly enable persistence
+  #   volumes:
+  #     - "${LOCALSTACK_VOLUME_DIR:-./localstack}:/var/lib/localstack"
+  #     - "/var/run/docker.sock:/var/run/docker.sock"  # Docker socket mount for DOCKER_HOST
