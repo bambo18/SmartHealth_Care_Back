@@ -1,0 +1,113 @@
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*.crt
+
+secrets/
+credentials/
+app-env-backup*
+server_app_env_reference.txt
+server_compose_reference.yml
+server_bashrc_reference.txt
+
+# Server backup files
+backend_env_backup_*
+*_env_backup_*
+*_backup_*
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.sql
+
+# =========================
+# Gradle / Java / Spring Boot
+# =========================
+.gradle/
+build/
+out/
+bin/
+
+*.class
+*.jar
+*.war
+*.ear
+
+!gradle/wrapper/gradle-wrapper.jar
+
+# Allow nested source build folders if needed
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+*.log.*
+hs_err_pid*
+replay_pid*
+
+# =========================
+# IntelliJ IDEA
+# =========================
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# =========================
+# Eclipse / STS
+# =========================
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+
+# =========================
+# Docker / Local Volumes
+# =========================
+data/
+database/
+postgres/
+postgres-data/
+pgdata/
+redis/
+localstack/
+uploads/
+static/uploads/
+
+docker/data/
+docker/postgres/
+docker/redis/
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Test / Coverage
+# =========================
+coverage/
+target/
+reports/
