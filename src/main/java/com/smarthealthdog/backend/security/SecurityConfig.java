@@ -68,11 +68,13 @@ public class SecurityConfig {
                 sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/auth/**",
-                    "/uploads/**" // for serving static files during development
-                ).permitAll()
-                .anyRequest().authenticated() 
+                    .requestMatchers(
+                            "/api/auth/**",
+                            "/uploads/**", // for serving static files during development
+                            "/swagger-ui/**",
+                            "/v3/api-docs/**"
+                    ).permitAll()
+                .anyRequest().authenticated()
             );
 
         http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);

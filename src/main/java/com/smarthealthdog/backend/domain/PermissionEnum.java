@@ -35,6 +35,10 @@ public enum PermissionEnum {
     CAN_USE_HEALTH_CHECK("can_use_health_check", "건강 검진 기능 사용"),
     CAN_VIEW_OWN_HEALTH_RECORDS("can_view_own_health_records", "자신의 건강 기록 보기"),
 
+    // --- Search Permissions ---
+    CAN_VIEW_SHELTERS("can_view_shelters", "보호소 목록 보기"),
+    CAN_VIEW_HOSPITALS("can_view_hospitals", "병원 목록 보기"),
+
     // --- Shelter Account Permissions ---
     CAN_VIEW_SHELT_PROFILE("can_view_shelter_profile", "보호소 프로필 보기"),
     CAN_EDIT_SHELT_PROFILE("can_edit_shelter_profile", "보호소 프로필 수정"),
