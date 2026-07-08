@@ -26,8 +26,9 @@ import com.smarthealthdog.backend.dto.PartialUpdatePetRequest;
 import com.smarthealthdog.backend.dto.PetResponse;
 import com.smarthealthdog.backend.dto.UpdatePetRequest;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
-import com.smarthealthdog.backend.services.PetService;
 import com.smarthealthdog.backend.services.AIDiagnosisClientService;
+import com.smarthealthdog.backend.services.PetService;
+import com.smarthealthdog.backend.utils.ImgUtils;
 import com.smarthealthdog.backend.validation.ErrorCode;
 
 import jakarta.validation.Valid;
@@ -37,46 +38,59 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/pets")
 @RequiredArgsConstructor
 public class PetController {
+
     private final PetService petService;
     private final AIDiagnosisClientService aiDiagnosisClientService;
+
+    /**
+     * PetResponse를 만들 때 DB에 저장된 S3 key를
+     * 프론트 접근 가능한 이미지 URL로 변환하기 위해 사용.
+     */
+    private final ImgUtils imgUtils;
 
     /** 반려동물 등록 */
     @PostMapping
     @PreAuthorize("hasAuthority('can_add_pet')")
     public ResponseEntity<PetResponse> create(
-            @RequestPart("request") @Valid CreatePetRequest req, 
+            @RequestPart("request") @Valid CreatePetRequest req,
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture
     ) throws IOException {
 
         Long ownerId = Long.parseLong(userDetails.getUsername());
         Pet saved = petService.create(ownerId, req, profilePicture);
-        return ResponseEntity.ok(PetResponse.from(saved));
+
+        return ResponseEntity.ok(PetResponse.from(saved, imgUtils));
     }
 
-    /** 단건 조회 (명세서: { status, pet } 구조) */
+    /** 단건 조회 */
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('can_view_own_pet_detail')")
     public ResponseEntity<PetResponse> get(
-        @PathVariable Long id,
-        @AuthenticationPrincipal UserDetails userDetails
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
         Long ownerId = Long.parseLong(userDetails.getUsername());
         Pet pet = petService.get(id);
-        if (pet.getOwner().getId() != ownerId) {
+
+        if (!pet.getOwner().getId().equals(ownerId)) {
             throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
         }
-        return ResponseEntity.ok(PetResponse.from(pet));
+
+        return ResponseEntity.ok(PetResponse.from(pet, imgUtils));
     }
 
     /** 소유자 기준 목록 조회 */
     @GetMapping
     @PreAuthorize("hasAuthority('can_view_own_pets')")
-    public ResponseEntity<List<PetResponse>> list(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<List<PetResponse>> list(
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
         Long ownerId = Long.parseLong(userDetails.getUsername());
+
         List<PetResponse> pets = petService.listByOwner(ownerId)
                 .stream()
-                .map(PetResponse::from)
+                .map(pet -> PetResponse.from(pet, imgUtils))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(pets);
@@ -91,21 +105,27 @@ public class PetController {
             @RequestPart(value = "profilePicture", required = false) MultipartFile profilePicture,
             @AuthenticationPrincipal UserDetails userDetails
     ) throws IOException {
+
         Long ownerId = Long.parseLong(userDetails.getUsername());
         Pet updated = petService.update(id, ownerId, req, profilePicture);
-        return ResponseEntity.ok(PetResponse.from(updated));
+
+        return ResponseEntity.ok(PetResponse.from(updated, imgUtils));
     }
 
     /** 삭제 */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('can_delete_pet')")
-    public ResponseEntity<Void> delete(@PathVariable Long id,
-                                       @AuthenticationPrincipal UserDetails userDetails) {
-        petService.delete(id, Long.parseLong(userDetails.getUsername()));
+    public ResponseEntity<Void> delete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long ownerId = Long.parseLong(userDetails.getUsername());
+        petService.delete(id, ownerId);
+
         return ResponseEntity.noContent().build();
     }
 
-    /** 부분 수정 (Partial Update) */
+    /** 부분 수정 */
     @PatchMapping("/{id}")
     @PreAuthorize("hasAuthority('can_edit_pet')")
     public ResponseEntity<PetResponse> partialUpdate(
@@ -115,11 +135,19 @@ public class PetController {
             @AuthenticationPrincipal UserDetails userDetails
     ) throws IOException {
 
-        Pet updatedPet = petService.partialUpdate(id, updates, Long.parseLong(userDetails.getUsername()), profilePicture);
-        return ResponseEntity.ok(PetResponse.from(updatedPet));
+        Long ownerId = Long.parseLong(userDetails.getUsername());
+
+        Pet updatedPet = petService.partialUpdate(
+                id,
+                updates,
+                ownerId,
+                profilePicture
+        );
+
+        return ResponseEntity.ok(PetResponse.from(updatedPet, imgUtils));
     }
 
-
+    /** 눈 진단 이미지 제출 */
     @PostMapping("/{id}/submissions/eye")
     @PreAuthorize("hasAuthority('can_use_health_check')")
     public ResponseEntity<Void> addEyeDiagnosis(
@@ -128,10 +156,13 @@ public class PetController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         Long ownerId = Long.parseLong(userDetails.getUsername());
+
         aiDiagnosisClientService.performEyeDiagnosis(image, id, ownerId);
+
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
+    /** 소변 진단 이미지 제출 */
     @PostMapping("/{id}/submissions/urine")
     @PreAuthorize("hasAuthority('can_use_health_check')")
     public ResponseEntity<Void> addUrineDiagnosis(
@@ -140,7 +171,9 @@ public class PetController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         Long ownerId = Long.parseLong(userDetails.getUsername());
+
         aiDiagnosisClientService.performUrineDiagnosis(image, id, ownerId);
+
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }
