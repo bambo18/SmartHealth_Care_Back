@@ -20,19 +20,35 @@ public class DevImgUtils implements ImgUtils {
         this.s3Presigner = s3Presigner;
     }
 
-    @Value("${local-storage.url-prefix}")
-    private String localStorageUrlPrefix;
-
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
 
+    /**
+     * dev 환경에서도 S3Uploader가 이미지를 OVH S3에 저장하므로,
+     * 프론트에는 /uploads/... 로컬 주소가 아니라
+     * S3 접근 가능한 presigned URL을 내려준다.
+     */
     @Override
     public String getImgUrl(String key) {
-        return localStorageUrlPrefix + "/uploads/" + key;
+        return createPresignedUrl(key);
     }
 
+    /**
+     * AI Worker용 이미지 URL도 presigned URL을 반환한다.
+     */
     @Override
     public String getImgUrlForAIWorker(String key) {
+        return createPresignedUrl(key);
+    }
+
+    /**
+     * S3 key를 1시간 동안 접근 가능한 presigned URL로 변환한다.
+     */
+    private String createPresignedUrl(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucket)
                 .key(key)
