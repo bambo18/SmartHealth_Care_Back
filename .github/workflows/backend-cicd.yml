@@ -1,0 +1,74 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smarthealth-backend-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 24
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "24"
+          cache: gradle
+
+      - name: Allow Gradle wrapper execution
+        run: chmod +x gradlew
+
+      - name: Build application
+        run: ./gradlew build -x test
+
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            > "$HOME/.ssh/id_ed25519"
+
+          printf '%s\n' "$VPS_KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Run deployment script
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          ssh \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            -i "$HOME/.ssh/id_ed25519" \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST"
