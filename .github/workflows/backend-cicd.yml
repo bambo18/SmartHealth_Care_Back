@@ -45,12 +45,15 @@ jobs:
     steps:
       - name: Configure SSH
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_PRIVATE_KEY_B64: ${{ secrets.VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
+          set -euo pipefail
+
           install -m 700 -d "$HOME/.ssh"
 
-          printf '%s\n' "$SSH_PRIVATE_KEY" \
+          printf '%s' "$SSH_PRIVATE_KEY_B64" \
+            | base64 --decode \
             > "$HOME/.ssh/id_ed25519"
 
           printf '%s\n' "$VPS_KNOWN_HOSTS" \
@@ -58,6 +61,12 @@ jobs:
 
           chmod 600 "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/known_hosts"
+
+          ssh-keygen -y \
+            -f "$HOME/.ssh/id_ed25519" \
+            > /dev/null
+
+          echo "SSH 개인키 형식 검증 완료"
 
       - name: Run deployment script
         env:
