@@ -1,31 +1,41 @@
 package com.smarthealthdog.backend.utils;
 
+import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class OAuthClient {
 
+    private final ObjectMapper objectMapper;
+
     /**
-     * 프로젝트의 공용 WebClient Bean을 사용하지 않고,
-     * 카카오 API 호출 전용 WebClient를 별도로 생성합니다.
+     * WebClient 대신 Java 17 기본 HttpClient를 사용합니다.
      *
-     * 공용 WebClient에 등록된 필터나 기본 설정에 의해
-     * Authorization 헤더가 제거되는 문제를 방지하기 위함입니다.
+     * HTTP/1.1을 명시하여 카카오 API 요청 과정에서
+     * Authorization 헤더가 누락되는 문제를 피합니다.
      */
-    private final WebClient kakaoWebClient =
-        WebClient.builder().build();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(Duration.ofSeconds(10))
+        .followRedirects(HttpClient.Redirect.NEVER)
+        .build();
 
     @Value("${spring.security.oauth2.client.provider.google.user-info-uri}")
     private String GOOGLE_USER_URL;
@@ -34,7 +44,7 @@ public class OAuthClient {
     private String KAKAO_USER_URL;
 
     /**
-     * 카카오 액세스 토큰으로 카카오 사용자 정보를 조회합니다.
+     * 카카오 액세스 토큰을 사용하여 카카오 사용자 정보를 조회합니다.
      *
      * @param accessToken 카카오 액세스 토큰
      * @return 카카오 사용자 정보 JSON
@@ -46,68 +56,117 @@ public class OAuthClient {
             );
         }
 
-        /*
-         * 복사 과정에서 토큰 앞뒤에 공백 또는 줄바꿈이 들어가는 것을
-         * 방지하기 위해 trim() 처리합니다.
-         */
         String normalizedAccessToken = accessToken.trim();
 
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(KAKAO_USER_URL))
+            .timeout(Duration.ofSeconds(15))
+            .header(
+                HttpHeaders.AUTHORIZATION,
+                "Bearer " + normalizedAccessToken
+            )
+            .header(
+                HttpHeaders.ACCEPT,
+                "application/json"
+            )
+            .GET()
+            .build();
+
+        /*
+         * 토큰 값 자체는 출력하지 않고,
+         * 헤더 존재 여부와 토큰 길이만 확인합니다.
+         */
+        log.info(
+            "카카오 사용자 정보 조회 요청: uri={}, tokenLength={}, authorizationHeaderPresent={}",
+            KAKAO_USER_URL,
+            normalizedAccessToken.length(),
+            request.headers()
+                .firstValue(HttpHeaders.AUTHORIZATION)
+                .isPresent()
+        );
+
         try {
-            /*
-             * 토큰 자체는 절대 로그에 출력하지 않습니다.
-             * 전달 여부를 확인할 수 있도록 길이만 기록합니다.
-             */
-            log.info(
-                "카카오 사용자 정보 조회 요청: uri={}, tokenLength={}",
-                KAKAO_USER_URL,
-                normalizedAccessToken.length()
+            HttpResponse<String> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofString(
+                    StandardCharsets.UTF_8
+                )
             );
 
-            JsonNode response = kakaoWebClient
-                .get()
-                .uri(URI.create(KAKAO_USER_URL))
-                /*
-                 * setBearerAuth 대신 Authorization 헤더를
-                 * 명시적으로 구성합니다.
-                 */
-                .header(
-                    HttpHeaders.AUTHORIZATION,
-                    "Bearer " + normalizedAccessToken
-                )
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
+            int statusCode = response.statusCode();
+            String responseBody = response.body();
 
-            if (response == null || response.isEmpty()) {
+            if (statusCode < 200 || statusCode >= 300) {
+                log.error(
+                    "카카오 사용자 정보 조회 실패: status={}, response={}",
+                    statusCode,
+                    responseBody
+                );
+
+                throw new IllegalStateException(
+                    "카카오 사용자 정보 조회에 실패했습니다. status=" +
+                    statusCode
+                );
+            }
+
+            if (responseBody == null || responseBody.isBlank()) {
                 throw new IllegalStateException(
                     "카카오 사용자 정보 응답이 비어 있습니다."
                 );
             }
 
+            JsonNode kakaoUserInfo =
+                objectMapper.readTree(responseBody);
+
+            String kakaoUserId =
+                kakaoUserInfo.path("id").asText("");
+
+            if (kakaoUserId.isBlank()) {
+                log.error(
+                    "카카오 사용자 정보에 사용자 ID가 없습니다. response={}",
+                    responseBody
+                );
+
+                throw new IllegalStateException(
+                    "카카오 사용자 ID가 응답에 없습니다."
+                );
+            }
+
             log.info(
                 "카카오 사용자 정보 조회 성공: kakaoUserId={}",
-                response.path("id").asText("")
+                kakaoUserId
             );
 
-            return response;
+            return kakaoUserInfo;
 
-        } catch (WebClientResponseException e) {
-            /*
-             * 액세스 토큰은 로그에 남기지 않습니다.
-             * 카카오가 반환한 상태와 응답 본문만 출력합니다.
-             */
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+
             log.error(
-                "카카오 사용자 정보 조회 실패: status={}, response={}",
-                e.getStatusCode(),
-                e.getResponseBodyAsString()
+                "카카오 사용자 정보 요청이 중단되었습니다.",
+                e
             );
 
-            throw e;
+            throw new IllegalStateException(
+                "카카오 사용자 정보 요청이 중단되었습니다.",
+                e
+            );
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error(
-                "카카오 사용자 정보 요청 중 오류 발생: {}",
+                "카카오 사용자 정보 응답 처리 중 오류가 발생했습니다: {}",
+                e.getMessage(),
+                e
+            );
+
+            throw new IllegalStateException(
+                "카카오 사용자 정보 응답 처리에 실패했습니다.",
+                e
+            );
+
+        } catch (RuntimeException e) {
+            log.error(
+                "카카오 사용자 정보 요청 중 오류가 발생했습니다: {}",
                 e.getMessage(),
                 e
             );
