@@ -124,3 +124,11 @@ inference-service:
     size: ${INFERENCE_SERVICE_BATCH_SIZE}
   interval:
     seconds: ${INFERENCE_SERVICE_INTERVAL_SECONDS} # 사용자가 무작위로 진단 요청을 보낼 때 AI 모델 서비스에 과부하가 걸리지 않도록 요청 간격을 조절하는 데 사용
+
+# Kakao OAuth Configuration
+kakao:
+  oauth:
+    rest-api-key: ${KAKAO_REST_API_KEY}
+    client-secret: ${KAKAO_CLIENT_SECRET}
+    redirect-uri: ${KAKAO_REDIRECT_URI}
+    token-uri: https://kauth.kakao.com/oauth/token
