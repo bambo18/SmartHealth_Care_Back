@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.smarthealthdog.backend.dto.CreateSocialKakaoUserRequest;
 import com.smarthealthdog.backend.dto.EmailVerificationCodeRequest;
+import com.smarthealthdog.backend.dto.KakaoAuthorizationCodeRequest;
 import com.smarthealthdog.backend.dto.LoginRequest;
 import com.smarthealthdog.backend.dto.LoginResponse;
 import com.smarthealthdog.backend.dto.RefreshTokenRequest;
@@ -28,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
     private final AuthenticationManager authenticationManager;
     private final AuthService authService;
 
@@ -46,7 +48,10 @@ public class AuthController {
         )
         MultipartFile profilePicture
     ) {
-        authService.registerUser(request, profilePicture);
+        authService.registerUser(
+            request,
+            profilePicture
+        );
 
         return ResponseEntity
             .status(HttpStatus.CREATED)
@@ -62,7 +67,9 @@ public class AuthController {
         @RequestBody
         EmailVerificationCodeRequest request
     ) {
-        authService.sendEmailVerification(request.email());
+        authService.sendEmailVerification(
+            request.email()
+        );
 
         return ResponseEntity
             .status(HttpStatus.CREATED)
@@ -70,7 +77,7 @@ public class AuthController {
     }
 
     /**
-     * 이메일과 비밀번호를 이용한 일반 로그인
+     * 일반 로그인
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> authenticateUser(
@@ -91,7 +98,9 @@ public class AuthController {
 
         LoginResponse response =
             authService.generateTokens(
-                Long.parseLong(userDetails.getUsername())
+                Long.parseLong(
+                    userDetails.getUsername()
+                )
             );
 
         return ResponseEntity.ok(response);
@@ -133,10 +142,9 @@ public class AuthController {
     }
 
     /**
-     * 카카오 로그인
+     * 기존 카카오 액세스 토큰 직접 전달 로그인 방식입니다.
      *
-     * 프론트엔드에서 발급받은 카카오 액세스 토큰을 전달받고,
-     * 카카오 사용자 조회 또는 회원가입 후 우리 서버 JWT를 반환한다.
+     * 기존 클라이언트와의 호환성을 위해 유지합니다.
      */
     @PostMapping("/login/social/kakao")
     public ResponseEntity<LoginResponse> loginWithKakao(
@@ -148,6 +156,28 @@ public class AuthController {
             authService.loginUserViaKakaoInfo(
                 request.accessToken()
             );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 카카오 인가 코드 로그인 방식입니다.
+     *
+     * 프론트는 카카오에서 전달받은 인가 코드만 전송합니다.
+     * 백엔드가 카카오 액세스 토큰 발급부터
+     * 우리 서버 JWT 생성까지 자동으로 처리합니다.
+     */
+    @PostMapping("/login/social/kakao/code")
+    public ResponseEntity<LoginResponse> loginWithKakaoAuthorizationCode(
+        @Valid
+        @RequestBody
+        KakaoAuthorizationCodeRequest request
+    ) {
+        LoginResponse response =
+            authService
+                .loginUserViaKakaoAuthorizationCode(
+                    request.code()
+                );
 
         return ResponseEntity.ok(response);
     }
