@@ -1,6 +1,7 @@
 package com.smarthealthdog.backend.validation;
 
 public enum ErrorCode {
+
     LOGIN_FAILURE("로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요."),
     SOCIAL_LOGIN_FAILURE("소셜 로그인에 실패했습니다. 다시 시도해주세요."),
     INVALID_INPUT("잘못된 입력입니다."),
@@ -30,6 +31,10 @@ public enum ErrorCode {
     INVALID_WALK_PATH("산책 경로가 유효하지 않습니다."),
     WALK_NOT_FOUND("산책을 찾을 수 없습니다."),
     INVALID_TIMEZONE("유효하지 않은 타임존 문자열입니다."),
+
+    // 조도 센서 관련 오류
+    INVALID_LIGHT_SAMPLE("조도 측정값이 유효하지 않습니다."),
+    LIGHT_SAMPLE_OUTSIDE_WALK("산책 시간 범위를 벗어난 조도 측정값입니다."),
 
     // 진단 관련 오류
     INVALID_PAGE_SIZE("페이지 크기는 1에서 15 사이여야 합니다."),
