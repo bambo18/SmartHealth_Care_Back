@@ -36,6 +36,8 @@ printenv_current_session.txt
 *.zip
 *.7z
 *.sql
+!src/main/resources/db/migration/
+!src/main/resources/db/migration/*.sql
 *.dump
 *.backup
 
