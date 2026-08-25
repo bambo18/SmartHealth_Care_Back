@@ -23,7 +23,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "walks")
 public class Walk {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne
@@ -33,40 +34,94 @@ public class Walk {
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
 
-    @Column(name = "end_time", nullable = false)
-    private Instant endTime;   // 종료 시점 저장
+    /*
+     * 산책 진행 중에는 아직 종료 시간이 없으므로 null 허용
+     *
+     * 산책 시작:
+     * endTime = null
+     *
+     * 산책 종료:
+     * endTime = 실제 종료 시간
+     */
+    @Column(name = "end_time")
+    private Instant endTime;
 
     @Column(name = "distance_km", nullable = false, precision = 7, scale = 2)
-    private BigDecimal distanceKm;          // 총 거리 (단위는 정책에 맞춰 사용)
+    private BigDecimal distanceKm;
 
     @Column(columnDefinition = "TEXT", name = "path_coordinates")
-    private String pathCoordinates;   // 경로(JSON 문자열)
+    private String pathCoordinates;
 
     @Builder
-    private Walk(Pet pet, Instant startTime, Instant endTime, BigDecimal distanceKm, String pathCoordinates) {
+    private Walk(
+            Pet pet,
+            Instant startTime,
+            Instant endTime,
+            BigDecimal distanceKm,
+            String pathCoordinates
+    ) {
         this.pet = pet;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.distanceKm = distanceKm;
-        this.pathCoordinates = pathCoordinates;
+
+        this.distanceKm = distanceKm != null
+                ? distanceKm
+                : BigDecimal.ZERO;
+
+        this.pathCoordinates = pathCoordinates != null
+                ? pathCoordinates
+                : "[]";
     }
 
+    /*
+     * 산책 시간(초)
+     *
+     * 진행 중인 산책은 endTime이 없기 때문에 null 반환
+     */
     public Long getDurationSeconds() {
         if (startTime != null && endTime != null) {
             return Duration.between(startTime, endTime).getSeconds();
         }
+
         return null;
     }
 
+    /*
+     * 기존 코드와의 호환성을 위해 유지
+     */
     public void end(Instant endTime) {
         if (endTime == null) {
             return;
         }
 
         this.endTime = endTime;
+    }
 
-        // durationSeconds는 startTime과 endTime 차이로 계산됨
-        // 현재 durationSeconds 필드가 없기 때문에
-        // getDurationSeconds()로 계산해서 사용
+    /*
+     * 산책 종료 처리
+     *
+     * 종료 시점에
+     * - 종료 시간
+     * - 최종 이동 거리
+     * - 최종 이동 경로
+     *
+     * 를 한 번에 저장
+     */
+    public void complete(
+            Instant endTime,
+            BigDecimal distanceKm,
+            String pathCoordinates
+    ) {
+        if (endTime != null) {
+            this.endTime = endTime;
+        }
+
+        if (distanceKm != null) {
+            this.distanceKm = distanceKm;
+        }
+
+        if (pathCoordinates != null) {
+            this.pathCoordinates = pathCoordinates;
+        }
     }
 }
