@@ -1,0 +1,1 @@
+INSERT INTO social_login_provider (name) VALUES ('KAKAO');

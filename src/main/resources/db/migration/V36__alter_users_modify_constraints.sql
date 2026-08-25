@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX idx_public_id ON users (public_id);

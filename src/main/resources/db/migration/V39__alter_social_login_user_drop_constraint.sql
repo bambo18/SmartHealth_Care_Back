@@ -1,0 +1,2 @@
+ALTER TABLE social_login_user
+DROP CONSTRAINT social_login_user_provider_user_id_key;

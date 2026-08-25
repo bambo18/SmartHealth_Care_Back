@@ -1,0 +1,12 @@
+ALTER TABLE roles
+ADD CONSTRAINT check_role_values
+CHECK (name IN (
+    'ADMIN',
+    'SHELTER',
+    'USER',
+    'UNVERIFIED_USER',
+    'BANNED_USER',
+    'DEACTIVATED_USER',
+    'DELETED_USER',
+    'SOCIAL_ACCOUNT_USER'
+));
