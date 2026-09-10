@@ -19,6 +19,13 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class HospitalSearchController {
 
+    private static final double MIN_LATITUDE = -90.0;
+    private static final double MAX_LATITUDE = 90.0;
+    private static final double MIN_LONGITUDE = -180.0;
+    private static final double MAX_LONGITUDE = 180.0;
+    private static final double MAX_RADIUS_KM = 100.0;
+    private static final int MAX_LIMIT = 50;
+
     private final HospitalSearchService hospitalSearchService;
 
     // [GET] /api/hospitals/search
@@ -39,6 +46,8 @@ public class HospitalSearchController {
             throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
         }
 
+        validateSearchParameters(lat, lng, radiusKm, limit, offset);
+
         HospitalSearchResponse resp = hospitalSearchService.search(
                 location,
                 lat,
@@ -49,5 +58,53 @@ public class HospitalSearchController {
                 offset
         );
         return ResponseEntity.ok(resp);
+    }
+
+    private void validateSearchParameters(
+            Double lat,
+            Double lng,
+            Double radiusKm,
+            Integer limit,
+            Integer offset
+    ) {
+        boolean hasLatitude = lat != null;
+        boolean hasLongitude = lng != null;
+
+        if (hasLatitude != hasLongitude) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (hasLatitude && (
+                !isFinite(lat)
+                || !isFinite(lng)
+                || lat < MIN_LATITUDE
+                || lat > MAX_LATITUDE
+                || lng < MIN_LONGITUDE
+                || lng > MAX_LONGITUDE
+        )) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (radiusKm != null && (
+                !isFinite(radiusKm)
+                || radiusKm <= 0
+                || radiusKm > MAX_RADIUS_KM
+        )) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (limit != null && (limit <= 0 || limit > MAX_LIMIT)) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (offset != null && offset < 0) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+    }
+
+    private boolean isFinite(Double value) {
+        return value != null
+                && !value.isNaN()
+                && !value.isInfinite();
     }
 }

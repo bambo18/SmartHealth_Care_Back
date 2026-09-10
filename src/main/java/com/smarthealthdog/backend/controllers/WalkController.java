@@ -165,6 +165,9 @@ public class WalkController {
 
             @PathVariable Long petId,
 
+            @AuthenticationPrincipal
+            UserDetails userDetails,
+
             @RequestParam(required = false)
             String timezone,
 
@@ -244,9 +247,15 @@ public class WalkController {
         // 산책 목록
         // --------------------------------------------------------
 
+        Long userId =
+                Long.parseLong(
+                        userDetails.getUsername()
+                );
+
         List<Walk> all =
                 walkService.listByPet(
                         petId,
+                        userId,
                         start,
                         end,
                         sort_by

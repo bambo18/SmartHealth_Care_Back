@@ -123,10 +123,19 @@ public class WalkService {
     @Transactional(readOnly = true)
     public List<Walk> listByPet(
             Long petId,
+                        Long userId,
             OffsetDateTime start,
             OffsetDateTime end,
             String sortBy
     ) {
+
+                Pet pet = petService.get(petId);
+
+                if (!pet.getOwner().getId().equals(userId)) {
+                        throw new ResourceNotFoundException(
+                                        ErrorCode.RESOURCE_NOT_FOUND
+                        );
+                }
 
         String sort =
                 (sortBy == null || sortBy.isBlank())
