@@ -123,3 +123,6 @@ desktop.ini
 coverage/
 target/
 reports/
+**/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
