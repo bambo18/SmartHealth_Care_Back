@@ -59,8 +59,9 @@ public interface LightSensorSampleRepository
     /*
      * 특정 반려동물의 특정 시간 범위 조도 데이터 조회
      *
-     * 예:
-     * 오늘 08:00 ~ 현재시간 또는 17:00
+     * 현재 일일 달성률 계산에서는
+     * Asia/Seoul 기준 오늘 00:00부터
+     * 현재 시각까지의 데이터를 조회한다.
      */
     @Query("""
         SELECT s
