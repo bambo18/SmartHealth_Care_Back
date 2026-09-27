@@ -3,9 +3,7 @@ package com.smarthealthdog.backend.services;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,21 +33,12 @@ public class SunlightService {
 
     /*
      * 서비스 기준 시간대
+     *
+     * 일일 조도 달성률 계산은
+     * Asia/Seoul 기준 날짜를 사용한다.
      */
     private static final ZoneId SERVICE_ZONE =
             ZoneId.of("Asia/Seoul");
-
-    /*
-     * 일광 측정 인정 시간
-     *
-     * 08:00 이상
-     * 17:00 미만
-     */
-    private static final LocalTime MEASUREMENT_START =
-            LocalTime.of(8, 0);
-
-    private static final LocalTime MEASUREMENT_END =
-            LocalTime.of(17, 0);
 
     /*
      * 10분 평균
@@ -62,7 +51,7 @@ public class SunlightService {
      *
      * 10분 / 30초 = 20개
      *
-     * 현재는 요구사항 그대로
+     * 현재 요구사항 그대로
      * 10분 구간에 20개 이상 있어야 계산한다.
      */
     private static final int MIN_SAMPLES_PER_WINDOW =
@@ -289,55 +278,29 @@ public class SunlightService {
                 LocalDate.now(SERVICE_ZONE);
 
 
-        ZonedDateTime startZoned =
-                today.atTime(MEASUREMENT_START)
-                        .atZone(SERVICE_ZONE);
-
-
-        ZonedDateTime endZoned =
-                today.atTime(MEASUREMENT_END)
-                        .atZone(SERVICE_ZONE);
-
-
+        /*
+         * 기존에는 08:00 ~ 17:00까지만
+         * 일광 노출 계산에 포함했지만,
+         *
+         * 현재는 시간 제한을 제거하여
+         * 오늘 00:00부터 현재 시각까지
+         * 모든 산책 중 조도 데이터를 계산한다.
+         */
         Instant dayStart =
-                startZoned.toInstant();
-
-        Instant dayEnd =
-                endZoned.toInstant();
+                today.atStartOfDay(SERVICE_ZONE)
+                        .toInstant();
 
 
         /*
-         * 현재 시간이 17:00 이전이면 현재 시각까지만 계산
-         *
-         * 17:00 이후라면 17:00까지만 계산
+         * 현재 시각까지 계산
          */
-        Instant now =
+        Instant effectiveEnd =
                 Instant.now();
 
 
-        Instant effectiveEnd =
-                now.isBefore(dayEnd)
-                        ? now
-                        : dayEnd;
-
-
         /*
-         * 아직 오전 8시 이전이라면
-         * 계산할 데이터 없음
-         */
-        if (!effectiveEnd.isAfter(dayStart)) {
-
-            return createProgressResponse(
-                    today,
-                    0,
-                    0,
-                    0
-            );
-        }
-
-
-        /*
-         * 3. 오늘 08:00 ~ 현재 또는 17:00까지 조도 조회
+         * 3. 오늘 00:00 ~ 현재 시각까지
+         * 조도 데이터 조회
          */
         List<LightSensorSample> samples =
                 lightSensorSampleRepository
@@ -402,8 +365,11 @@ public class SunlightService {
             /*
              * 계산 시작 시각
              *
-             * 산책 시작이 08:00 이전이면
-             * 08:00부터 시작
+             * 산책이 오늘 00:00 이후 시작했다면
+             * 실제 산책 시작 시각부터 계산한다.
+             *
+             * 자정을 넘겨 이어진 산책이라면
+             * 오늘 00:00부터 계산한다.
              */
             Instant calculationStart =
                     walk.getStartTime()
@@ -415,6 +381,8 @@ public class SunlightService {
 
             /*
              * 계산 종료 시각
+             *
+             * 기본값은 현재 시각
              */
             Instant calculationEnd =
                     effectiveEnd;
@@ -433,6 +401,10 @@ public class SunlightService {
             }
 
 
+            /*
+             * 종료 시각이 시작 시각보다
+             * 뒤가 아니라면 계산하지 않음
+             */
             if (!calculationEnd
                     .isAfter(calculationStart)) {
 
