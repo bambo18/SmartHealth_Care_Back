@@ -1,6 +1,7 @@
 package com.smarthealthdog.backend.clients.naver;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -53,7 +54,15 @@ public class NaverLocalSearchClient {
                 .encode()
                 .toUri();
 
-        String responseBody = restClient.get()
+        /*
+         * NAVER Local Search API가
+         * Content-Type: text/plain;charset=UTF-8
+         * 형태로 응답하는 경우가 있으므로,
+         *
+         * String.class로 바로 변환하지 않고
+         * 원본 byte[]를 받은 뒤 UTF-8로 명시적으로 디코딩한다.
+         */
+        byte[] responseBytes = restClient.get()
                 .uri(uri)
                 .header(
                         "X-NCP-APIGW-API-KEY-ID",
@@ -64,14 +73,25 @@ public class NaverLocalSearchClient {
                         clientSecret
                 )
                 .retrieve()
-                .body(String.class);
+                .body(byte[].class);
 
-        if (responseBody == null || responseBody.isBlank()) {
+        if (responseBytes == null || responseBytes.length == 0) {
             throw new IllegalStateException(
                     "NAVER Local Search API returned an empty response."
             );
         }
 
+        /*
+         * NAVER 응답을 UTF-8로 명시적으로 변환
+         */
+        String responseBody = new String(
+                responseBytes,
+                StandardCharsets.UTF_8
+        );
+
+        /*
+         * JSON 문자열을 NaverLocalSearchResponse DTO로 변환
+         */
         try {
             return objectMapper.readValue(
                     responseBody,
