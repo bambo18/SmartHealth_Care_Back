@@ -12,24 +12,29 @@ services:
     environment:
       # Activate the 'dev' Spring profile
       SPRING_PROFILES_ACTIVE: dev
+
       # Configure Spring Boot to connect to the PostgreSQL service
       DB_HOST: postgres # Override for Docker internal network
       DB_PORT: 5432     # Override for Docker internal network
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+
       # Redis configuration
       REDIS_HOST: redis # Override for Docker internal network
       REDIS_PORT: 6379  # Override for Docker internal network
       REDIS_PASSWORD: ${REDIS_PASSWORD}  # Redis 비밀번호 (필요시 설정)
+
       # Flyway configuration
       AI_MODEL_SERVICE_EMAIL: ${AI_MODEL_SERVICE_EMAIL}
       AI_MODEL_SERVICE_PASSWORD_HASH: ${AI_MODEL_SERVICE_PASSWORD_HASH}
+
       # AI Model Service configuration
       INFERENCE_SERVICE_RETRY_MAX_ATTEMPTS: ${INFERENCE_SERVICE_RETRY_MAX_ATTEMPTS}
       INFERENCE_SERVICE_TIMEOUT_SECONDS: ${INFERENCE_SERVICE_TIMEOUT_SECONDS}
       INFERENCE_SERVICE_BATCH_SIZE: ${INFERENCE_SERVICE_BATCH_SIZE}
       INFERENCE_SERVICE_INTERVAL_SECONDS: ${INFERENCE_SERVICE_INTERVAL_SECONDS}
+
       # SMTP configuration
       SMTP_FROM: ${SMTP_FROM}
       SMTP_HOST: ${SMTP_HOST}
@@ -40,13 +45,22 @@ services:
       SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-true}
       SMTP_SSL_ENABLE: ${SMTP_SSL_ENABLE:-false}
       ALLOWED_EMAILS_COMMA_SEPARATED: ${ALLOWED_EMAILS_COMMA_SEPARATED}
+
       # Secret Keys
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_VERIFICATION_SECRET: ${EMAIL_VERIFICATION_SECRET}
+
       # Kakao OAuth Configuration
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
       KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
+
+      # NAVER API Configuration
+      NAVER_SEARCH_CLIENT_ID: ${NAVER_SEARCH_CLIENT_ID}
+      NAVER_SEARCH_CLIENT_SECRET: ${NAVER_SEARCH_CLIENT_SECRET}
+      NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID}
+      NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET}
+
       # AWS Configuration
       AWS_REGION: ${AWS_REGION}
       AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
@@ -54,6 +68,7 @@ services:
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       AWS_CLOUDFRONT_DOMAIN: ${AWS_CLOUDFRONT_DOMAIN}
       AWS_ENDPOINT: ${AWS_ENDPOINT}
+
       # Local Storage Settings
       LOCAL_RESOURCE_PATH: file:/app/uploads/
       LOCAL_STORAGE_URL_PREFIX: ${LOCAL_STORAGE_URL_PREFIX}
@@ -66,7 +81,8 @@ services:
       postgres:
         condition: service_healthy # Recommended for reliable startup
       redis:
-        condition: service_started 
+        condition: service_started
+
     # Optional: If you want to run a custom command (like activating a different profile)
     command: java -jar /app/app.jar --spring.profiles.active=dev
 
