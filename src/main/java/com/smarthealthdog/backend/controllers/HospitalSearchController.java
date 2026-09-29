@@ -32,31 +32,69 @@ public class HospitalSearchController {
     @GetMapping("/search")
     @PreAuthorize("hasAuthority('can_view_hospitals')")
     public ResponseEntity<HospitalSearchResponse> search(
-            @RequestParam(required = false) String location,
-            @RequestParam(required = false) Double lat,
-            @RequestParam(required = false) Double lng,
-            @RequestParam(name = "radius_km", required = false) Double radiusKm,
-            @RequestParam(name = "sort_by", required = false) String sortBy,
-            @RequestParam(required = false) Integer limit,
-            @RequestParam(required = false) Integer offset
+
+            @RequestParam(required = false)
+            String location,
+
+            // NAVER 병원 검색 키워드
+            // 예: 24시, 365, 피부, 정형외과
+            @RequestParam(required = false)
+            String query,
+
+            @RequestParam(required = false)
+            Double lat,
+
+            @RequestParam(required = false)
+            Double lng,
+
+            @RequestParam(
+                    name = "radius_km",
+                    required = false
+            )
+            Double radiusKm,
+
+            @RequestParam(
+                    name = "sort_by",
+                    required = false
+            )
+            String sortBy,
+
+            @RequestParam(required = false)
+            Integer limit,
+
+            @RequestParam(required = false)
+            Integer offset
     ) {
 
         // 공통 예외
-        if ((location == null || location.isBlank()) && (lat == null || lng == null)) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        if ((location == null || location.isBlank())
+                && (lat == null || lng == null)) {
+
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
 
-        validateSearchParameters(lat, lng, radiusKm, limit, offset);
-
-        HospitalSearchResponse resp = hospitalSearchService.search(
-                location,
+        validateSearchParameters(
                 lat,
                 lng,
                 radiusKm,
-                sortBy,
                 limit,
                 offset
         );
+
+        HospitalSearchResponse resp =
+                hospitalSearchService.search(
+                        location,
+                        query,      // 추가
+                        lat,
+                        lng,
+                        radiusKm,
+                        sortBy,
+                        limit,
+                        offset
+                );
+
         return ResponseEntity.ok(resp);
     }
 
@@ -67,11 +105,14 @@ public class HospitalSearchController {
             Integer limit,
             Integer offset
     ) {
+
         boolean hasLatitude = lat != null;
         boolean hasLongitude = lng != null;
 
         if (hasLatitude != hasLongitude) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
 
         if (hasLatitude && (
@@ -82,7 +123,9 @@ public class HospitalSearchController {
                 || lng < MIN_LONGITUDE
                 || lng > MAX_LONGITUDE
         )) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
 
         if (radiusKm != null && (
@@ -90,15 +133,23 @@ public class HospitalSearchController {
                 || radiusKm <= 0
                 || radiusKm > MAX_RADIUS_KM
         )) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
 
-        if (limit != null && (limit <= 0 || limit > MAX_LIMIT)) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        if (limit != null
+                && (limit <= 0 || limit > MAX_LIMIT)) {
+
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
 
         if (offset != null && offset < 0) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
         }
     }
 
