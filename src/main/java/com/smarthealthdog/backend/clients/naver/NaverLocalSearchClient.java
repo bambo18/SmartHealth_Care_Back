@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smarthealthdog.backend.dto.hospital.naver.NaverLocalSearchResponse;
 
 @Component
@@ -16,11 +18,13 @@ public class NaverLocalSearchClient {
             "https://naverapihub.apigw.ntruss.com";
 
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
     private final String clientId;
     private final String clientSecret;
 
     public NaverLocalSearchClient(
             RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
             @Value("${naver.search.client-id}") String clientId,
             @Value("${naver.search.client-secret}") String clientSecret
     ) {
@@ -28,11 +32,16 @@ public class NaverLocalSearchClient {
                 .baseUrl(BASE_URL)
                 .build();
 
+        this.objectMapper = objectMapper;
         this.clientId = clientId;
         this.clientSecret = clientSecret;
     }
 
-    public NaverLocalSearchResponse search(String query, int display, int start) {
+    public NaverLocalSearchResponse search(
+            String query,
+            int display,
+            int start
+    ) {
 
         URI uri = UriComponentsBuilder
                 .fromPath("/search/v1/local")
@@ -44,11 +53,35 @@ public class NaverLocalSearchClient {
                 .encode()
                 .toUri();
 
-        return restClient.get()
+        String responseBody = restClient.get()
                 .uri(uri)
-                .header("X-NCP-APIGW-API-KEY-ID", clientId)
-                .header("X-NCP-APIGW-API-KEY", clientSecret)
+                .header(
+                        "X-NCP-APIGW-API-KEY-ID",
+                        clientId
+                )
+                .header(
+                        "X-NCP-APIGW-API-KEY",
+                        clientSecret
+                )
                 .retrieve()
-                .body(NaverLocalSearchResponse.class);
+                .body(String.class);
+
+        if (responseBody == null || responseBody.isBlank()) {
+            throw new IllegalStateException(
+                    "NAVER Local Search API returned an empty response."
+            );
+        }
+
+        try {
+            return objectMapper.readValue(
+                    responseBody,
+                    NaverLocalSearchResponse.class
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(
+                    "Failed to parse NAVER Local Search API response.",
+                    e
+            );
+        }
     }
 }
