@@ -1,5 +1,6 @@
 package com.smarthealthdog.backend.utils;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.UUID;
 
@@ -26,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
 @RequiredArgsConstructor
 @Component
@@ -70,18 +72,7 @@ public class S3Uploader implements ImageUploader {
             throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
         }
 
-        String ext = event.originalFilename()
-                         .substring(event.originalFilename().lastIndexOf("."));
-        String key = "profiles/" + UUID.randomUUID() + ext;
-
-        s3Client.putObject(
-            PutObjectRequest.builder()
-                .bucket(bucket)
-                .key(key)
-                .contentType(event.contentType())
-                .build(),
-            RequestBody.fromBytes(event.fileBytes())
-        );
+        String key = putImageObject("profiles/", event.fileBytes());
 
         event.user().setProfilePic(key);
         userRepository.save(event.user());
@@ -102,18 +93,7 @@ public class S3Uploader implements ImageUploader {
             throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
         }
 
-        String ext = event.originalFilename()
-                         .substring(event.originalFilename().lastIndexOf("."));
-        String key = "pets/" + UUID.randomUUID() + ext;
-
-        s3Client.putObject(
-            PutObjectRequest.builder()
-                .bucket(bucket)
-                .key(key)
-                .contentType(event.contentType())
-                .build(),
-            RequestBody.fromBytes(event.fileBytes())
-        );
+        String key = putImageObject("pets/", event.fileBytes());
 
         event.pet().setProfileImage(key);
         petRepository.save(event.pet());
@@ -139,19 +119,9 @@ public class S3Uploader implements ImageUploader {
             throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
         }
 
-        String ext = event.originalFilename()
-                         .substring(event.originalFilename().lastIndexOf("."));
-        String key = "diagnoses/" + UUID.randomUUID() + ext;
-
+        String key;
         try {
-            s3Client.putObject(
-                PutObjectRequest.builder()
-                    .bucket(bucket)
-                    .key(key)
-                    .contentType(event.contentType())
-                    .build(),
-                RequestBody.fromBytes(event.fileBytes())
-            );
+            key = putImageObject("diagnoses/", event.fileBytes());
         } catch (Exception e) {
             // TODO: 업로드 실패 시, Sentry나 로그 시스템에 알림 전송 기능 필요
             submissionService.failSubmission(submission, SubmissionFailureReasonEnum.SERVICE_ERROR);
@@ -160,5 +130,45 @@ public class S3Uploader implements ImageUploader {
 
         submission.setPhotoUrl(key);
         submissionService.saveSubmission(submission);
+    }
+
+    /**
+     * 바이트 내용을 Tika로 판정해 S3에 안전하게 저장한다.
+     *
+     * 클라이언트가 보낸 contentType·파일명 확장자는 쓰지 않는다.
+     * Content-Disposition 을 attachment 로 고정해, 설령 판정이 뚫려도
+     * 브라우저가 인라인 렌더링하지 않게 한다.
+     *
+     * @param prefix S3 키 접두사 (예: "profiles/")
+     * @param fileBytes 업로드할 바이트
+     * @return 저장된 S3 object key
+     * @throws InvalidRequestDataException 허용 이미지가 아닌 경우
+     */
+    private String putImageObject(String prefix, byte[] fileBytes) {
+        String detectedMimeType;
+        try {
+            detectedMimeType = FileUtils.detectImageMimeType(new ByteArrayInputStream(fileBytes));
+        } catch (IOException e) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
+        }
+
+        if (detectedMimeType == null) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
+        }
+
+        String key = prefix + UUID.randomUUID() + FileUtils.extensionForMimeType(detectedMimeType);
+
+        s3Client.putObject(
+            PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(detectedMimeType)
+                .contentDisposition("attachment")
+                .serverSideEncryption(ServerSideEncryption.AES256)
+                .build(),
+            RequestBody.fromBytes(fileBytes)
+        );
+
+        return key;
     }
 }
