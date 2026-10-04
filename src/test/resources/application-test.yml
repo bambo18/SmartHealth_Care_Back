@@ -31,6 +31,11 @@ spring:
             required: true
   quartz:
     auto-startup: false
+  servlet:
+    multipart:
+      # upload.image.max-size-bytes 와 같은 값. 운영 yml과 동일하게 유지한다.
+      max-file-size: 7MB
+      max-request-size: 9MB
   security:
     oauth2:
       client:
@@ -111,3 +116,17 @@ kakao:
     client-secret: ${KAKAO_CLIENT_SECRET:test-client-secret}
     redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/callback}
     token-uri: https://kauth.kakao.com/oauth/token
+
+# clients/naver/* 가 기본값 없이 주입하므로, 이 키들이 없으면
+# @SpringBootTest 컨텍스트가 환경변수 없이는 뜨지 않는다.
+naver:
+  search:
+    client-id: ${NAVER_SEARCH_CLIENT_ID:test-search-client-id}
+    client-secret: ${NAVER_SEARCH_CLIENT_SECRET:test-search-client-secret}
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID:test-maps-client-id}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET:test-maps-client-secret}
+
+upload:
+  image:
+    max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032} # 7MB
