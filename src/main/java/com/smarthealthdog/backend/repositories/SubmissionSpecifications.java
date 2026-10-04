@@ -5,6 +5,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -72,6 +73,7 @@ public class SubmissionSpecifications {
     /**
      * 서브미션을 필터링하는 스펙 생성기. 삭제된 서브미션은 제외합니다.
      * @param userId 소유자 ID로 필터링
+     * @param type 제출 유형 필터 (null 이면 모든 유형)
      * @param submittedFrom 제출일 시작 범위 (null 가능)
      * @param submittedTo 제출일 종료 범위 (null 가능)
      * @param completedFrom 완료일 시작 범위 (null 가능)
@@ -80,6 +82,7 @@ public class SubmissionSpecifications {
      */
     public static Specification<Submission> filterUserSubmissions(
         Long userId,
+        SubmissionTypeEnum type,
         Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
@@ -92,7 +95,12 @@ public class SubmissionSpecifications {
             // Assuming 'pet' is a field in 'Submission' and 'owner' is a field in 'Pet'
             predicates.add(cb.equal(root.get("pet").get("owner").get("id"), userId));
 
-            // 2. Dynamic Filter: submittedAt Range
+            // 2. Dynamic Filter: 제출 유형 (선택)
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+
+            // 3. Dynamic Filter: submittedAt Range
             if (submittedFrom != null && submittedTo != null) {
                 // submittedFrom <= submittedAt <= submittedTo
                 predicates.add(cb.between(root.get("submittedAt"), submittedFrom, submittedTo));
@@ -133,6 +141,7 @@ public class SubmissionSpecifications {
      * 서브미션을 필터링하는 스펙 생성기. 삭제된 서브미션은 제외합니다.
      * @param userId 소유자 ID로 필터링
      * @param petId 펫 ID로 필터링
+     * @param type 제출 유형 필터 (null 이면 모든 유형)
      * @param submittedFrom 제출일 시작 범위 (null 가능)
      * @param submittedTo 제출일 종료 범위 (null 가능)
      * @param completedFrom 완료일 시작 범위 (null 가능)
@@ -142,6 +151,7 @@ public class SubmissionSpecifications {
     public static Specification<Submission> filterPetSubmissions(
         Long userId,
         Long petId,
+        SubmissionTypeEnum type,
         Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
@@ -157,7 +167,12 @@ public class SubmissionSpecifications {
             // 2. Mandatory Filter: Filter by Pet ID
             predicates.add(cb.equal(root.get("pet").get("id"), petId));
 
-            // 3. Dynamic Filter: submittedAt Range
+            // 3. Dynamic Filter: 제출 유형 (선택)
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+
+            // 4. Dynamic Filter: submittedAt Range
             if (submittedFrom != null && submittedTo != null) {
                 // submittedFrom <= submittedAt <= submittedTo
                 predicates.add(cb.between(root.get("submittedAt"), submittedFrom, submittedTo));
@@ -170,7 +185,7 @@ public class SubmissionSpecifications {
             }
             // If both are null, no filter is added for submittedAt
 
-            // 4. Dynamic Filter: completedAt Range
+            // 5. Dynamic Filter: completedAt Range
             if (completedFrom != null && completedTo != null) {
                 predicates.add(cb.between(root.get("completedAt"), completedFrom, completedTo));
             } else if (completedFrom != null) {
@@ -179,7 +194,12 @@ public class SubmissionSpecifications {
                 predicates.add(cb.lessThanOrEqualTo(root.get("completedAt"), completedTo));
             }
             // If both are null, no filter is added for completedAt
-            
+
+            // 6. Mandatory Filter: Exclude Deleted Submissions
+            // filterUserSubmissions 와 동일하게 소프트 삭제된 제출을 제외한다.
+            // 이 조건이 빠져 있어 반려동물별 목록에만 삭제된 제출이 보이는 버그가 있었다.
+            predicates.add(cb.notEqual(root.get("status"), SubmissionStatus.DELETED));
+
             // NOTE: To prevent the "N+1 select" problem, you still need to fetch joins.
             // This is done outside the predicate building, typically using the 'query' object:
             if (query.getResultType() != Long.class && query.getResultType() != long.class) {

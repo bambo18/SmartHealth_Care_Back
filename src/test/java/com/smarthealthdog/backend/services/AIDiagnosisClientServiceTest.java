@@ -64,13 +64,15 @@ public class AIDiagnosisClientServiceTest {
     @Autowired
     private AIDiagnosisClientService aiDiagnosisClientService;
 
+    @Autowired
+    private DiagnosisAttemptLimiter diagnosisAttemptLimiter;
+
     @BeforeAll
     public void setup() {
-        ReflectionTestUtils.setField(
-            aiDiagnosisClientService,
-            "inferenceIntervalSeconds",
-            0
-        );
+        // 빈도 제한 간격은 AIDiagnosisClientService 가 아니라 DiagnosisAttemptLimiter 가 가진다.
+        // 이 테스트는 제한에 걸리지 않는 것이 목적이므로 두 간격을 모두 0 으로 둔다.
+        ReflectionTestUtils.setField(diagnosisAttemptLimiter, "petIntervalSeconds", 0);
+        ReflectionTestUtils.setField(diagnosisAttemptLimiter, "userIntervalSeconds", 0);
 
         // iterate over Enum values and create permissions
         // // --- General User Permissions (User & Profile) ---

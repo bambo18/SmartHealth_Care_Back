@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.dto.diagnosis.get.DiagnosisResult;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionDetail;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionPage;
@@ -28,6 +29,7 @@ import com.smarthealthdog.backend.dto.diagnosis.get.UrineMeasurementResult;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionStatusUpdateRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionUrineTestUpdateRequest;
+import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
 import com.smarthealthdog.backend.services.SubmissionService;
 
 import jakarta.validation.Valid;
@@ -43,6 +45,7 @@ public class SubmissionController {
     @PreAuthorize("hasAuthority('can_view_own_health_records')")
     public ResponseEntity<SubmissionPage> getSubmissionList(
             @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(value = "type", required = false) SubmissionTypeEnum type,
             @RequestParam(value = "submittedFrom", required = false) Instant submittedFrom,
             @RequestParam(value = "submittedTo", required = false) Instant submittedTo,
             @RequestParam(value = "completedFrom", required = false) Instant completedFrom,
@@ -60,7 +63,8 @@ public class SubmissionController {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(
             submissionService.getSubmissionsByUserId(
-                userId, 
+                userId,
+                type,
                 submittedFrom,
                 submittedTo,
                 completedFrom,
@@ -74,6 +78,7 @@ public class SubmissionController {
     @PreAuthorize("hasAuthority('can_view_own_health_records')")
     public ResponseEntity<SubmissionPage> getSubmissionsByPetId(
             @PathVariable("petId") Long petId,
+            @RequestParam(value = "type", required = false) SubmissionTypeEnum type,
             @RequestParam(value = "submittedFrom", required = false) Instant submittedFrom,
             @RequestParam(value = "submittedTo", required = false) Instant submittedTo,
             @RequestParam(value = "completedFrom", required = false) Instant completedFrom,
@@ -92,9 +97,10 @@ public class SubmissionController {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(
             submissionService.getSubmissionsByPetId(
-                petId, 
-                userId, 
-                submittedFrom, 
+                petId,
+                userId,
+                type,
+                submittedFrom,
                 submittedTo, 
                 completedFrom, 
                 completedTo, 
@@ -142,6 +148,17 @@ public class SubmissionController {
     ) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(submissionService.getSubmissionAndDiagnosesById(submissionId, languageCode, userId));
+    }
+
+    /** 제출 이미지 단기 서명 URL. 모든 제출 유형에 공통으로 동작한다. */
+    @GetMapping("/{id}/image")
+    @PreAuthorize("hasAuthority('can_view_own_health_records')")
+    public ResponseEntity<ImageUrlResponse> getSubmissionImageUrl(
+            @PathVariable("id") UUID submissionId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(submissionService.getSecureImageUrl(submissionId, userId));
     }
 
     @GetMapping("/{id}/urine")

@@ -48,18 +48,23 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
             List<String> celeryMessages = requestDataList.stream()
                 .map(data -> {
                     try {
-                        if (data.submission().getType() == SubmissionTypeEnum.EYE) {
-                            return generateCeleryMessageForEyeTest(
+                        return switch (data.submission().getType()) {
+                            case EYE -> generateCeleryMessageForEyeTest(
                                 data.imageUrl(),
                                 data.submission().getId(),
                                 data.submission().getPet().getSpecies()
                             );
-                        } else {
-                            return generateCeleryMessageForUrineTest(
+                            case URINE -> generateCeleryMessageForUrineTest(
                                 data.imageUrl(),
                                 data.submission().getId()
                             );
-                        }
+                            // 동기 처리 유형은 Celery 큐로 흘러갈 경로가 없어야 한다.
+                            // 여기까지 왔다면 배치 쿼리나 상태 전이에 버그가 있다.
+                            case HEALTH_CERTIFICATE, ORAL -> throw new IllegalStateException(
+                                "동기 처리 유형은 Celery 큐로 보낼 수 없습니다: "
+                                    + data.submission().getType()
+                            );
+                        };
                     } catch (JsonProcessingException e) {
                         throw new RuntimeException(e);
                     }

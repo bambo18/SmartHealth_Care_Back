@@ -75,8 +75,9 @@ spring:
   # 이 설정이 없으면 Spring 기본값 1MB가 적용되어
   # 폰으로 찍은 진단서 사진이 대부분 거부된다.
   #
-  # 10MB가 아니라 7MB인 이유: OCR 요청은 이미지를 본문에 실어 보내므로
-  # 원본보다 커진다. 7MB면 CLOVA OCR 요청 크기 한도 안에 안전하게 들어가고,
+  # 10MB가 아니라 7MB인 이유: Google Vision은 이미지를 base64로 JSON 본문에
+  # 담아 보내므로 크기가 약 1.33배로 불어난다. 7MB -> 약 9.3MB로 Vision
+  # 요청 크기 한도 아래에 안전하게 들어가고,
   # 5MB로 낮추면 압축이 강제돼 OCR 신뢰도가 떨어진다.
   # upload.image.max-size-bytes 와 반드시 같은 값을 유지한다.
   servlet:
@@ -180,3 +181,18 @@ upload:
     # spring.servlet.multipart.max-file-size 와 반드시 같은 값이어야 한다 —
     # 다르면 둘 사이 크기의 파일이 컨테이너를 통과한 뒤 INVALID_IMAGE로 거부된다.
     max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032} # 7MB
+
+
+# 건강검진표 OCR
+ocr:
+  # 사용자 단위 최소 요청 간격(초). 유료 OCR 추론 호출에만 적용된다.
+  # 반려동물 단위 제한(inference-service.interval.seconds)만으로는
+  # 반려동물을 여러 마리 등록해 우회할 수 있다.
+  user-interval:
+    seconds: ${OCR_USER_INTERVAL_SECONDS:30}
+
+
+# 진단서 이미지 접근용 단기 서명 URL
+health-certificate:
+  image:
+    presigned-url-expiration-seconds: ${HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS:300}

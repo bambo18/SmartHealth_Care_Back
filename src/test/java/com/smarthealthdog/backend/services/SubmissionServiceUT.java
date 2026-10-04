@@ -1,11 +1,14 @@
 package com.smarthealthdog.backend.services;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.smarthealthdog.backend.domain.Condition;
 import com.smarthealthdog.backend.domain.ConditionTranslation;
@@ -32,11 +36,14 @@ import com.smarthealthdog.backend.domain.User;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionMapper;
 import com.smarthealthdog.backend.dto.diagnosis.update.DiagnosisResultDto;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
+import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
 import com.smarthealthdog.backend.exceptions.InternalServerErrorException;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.repositories.LanguageRepository;
 import com.smarthealthdog.backend.repositories.SubmissionRepository;
+import com.smarthealthdog.backend.utils.ImgUtils;
+import com.smarthealthdog.backend.validation.ErrorCode;
 
 @ExtendWith(MockitoExtension.class)
 public class SubmissionServiceUT {
@@ -58,6 +65,80 @@ public class SubmissionServiceUT {
 
     @Mock
     private SubmissionMapper submissionMapper;
+
+    @Mock
+    private ImgUtils imgUtils;
+
+    @Test
+    void getSecureImageUrl_서명URL과_만료초를_반환한다() {
+        ReflectionTestUtils.setField(submissionService, "imageUrlExpirationSeconds", 300);
+
+        UUID id = UUID.randomUUID();
+        Submission submission = mock(Submission.class);
+        when(submission.getPhotoUrl()).thenReturn("health-certificates/abc.jpg");
+        when(submissionRepository.findByIdWithPetAndUserAndOwnerId(id, 7L))
+            .thenReturn(Optional.of(submission));
+        when(imgUtils.getSecureImgUrl("health-certificates/abc.jpg", Duration.ofSeconds(300)))
+            .thenReturn("https://s3.example.com/health-certificates/abc.jpg?X-Amz-Expires=300");
+
+        ImageUrlResponse response = submissionService.getSecureImageUrl(id, 7L);
+
+        assertEquals("https://s3.example.com/health-certificates/abc.jpg?X-Amz-Expires=300",
+                     response.imageUrl());
+        assertEquals(300L, response.expiresIn());
+    }
+
+    @Test
+    void getSecureImageUrl_이미지가_아직_없는_행이면_404를_낸다() {
+        // 검토 집중 지점 1: createSubmission 은 photoUrl="" 로 행을 만든다.
+        // 업로드 전/실패 행에 이 엔드포인트를 호출하면 null 서명 URL 이 나가면 안 된다.
+        ReflectionTestUtils.setField(submissionService, "imageUrlExpirationSeconds", 300);
+
+        UUID id = UUID.randomUUID();
+        Submission submission = mock(Submission.class);
+        when(submission.getPhotoUrl()).thenReturn("");
+        when(submissionRepository.findByIdWithPetAndUserAndOwnerId(id, 7L))
+            .thenReturn(Optional.of(submission));
+
+        ResourceNotFoundException e = assertThrows(
+            ResourceNotFoundException.class,
+            () -> submissionService.getSecureImageUrl(id, 7L)
+        );
+
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, e.getErrorCode());
+        verify(imgUtils, never()).getSecureImgUrl(any(), any());
+    }
+
+    @Test
+    void getSecureImageUrl_삭제된_제출이면_404를_낸다() {
+        ReflectionTestUtils.setField(submissionService, "imageUrlExpirationSeconds", 300);
+
+        UUID id = UUID.randomUUID();
+        Submission submission = mock(Submission.class);
+        when(submission.getStatus()).thenReturn(SubmissionStatus.DELETED);
+        when(submissionRepository.findByIdWithPetAndUserAndOwnerId(id, 7L))
+            .thenReturn(Optional.of(submission));
+
+        assertThrows(
+            ResourceNotFoundException.class,
+            () -> submissionService.getSecureImageUrl(id, 7L)
+        );
+
+        verify(imgUtils, never()).getSecureImgUrl(any(), any());
+    }
+
+    @Test
+    void getSecureImageUrl_타인의_제출이면_404를_낸다() {
+        // findByIdWithPetAndUserAndOwnerId 가 userId 조건을 포함하므로 빈 Optional 이 온다.
+        UUID id = UUID.randomUUID();
+        when(submissionRepository.findByIdWithPetAndUserAndOwnerId(id, 99L))
+            .thenReturn(Optional.empty());
+
+        assertThrows(
+            ResourceNotFoundException.class,
+            () -> submissionService.getSecureImageUrl(id, 99L)
+        );
+    }
 
     @Test
     void completeDiagnosis_ShouldThrowInvalidRequestDataException_WhenSubmissionStatusIsNotProcessing() {
@@ -297,6 +378,7 @@ public class SubmissionServiceUT {
                 null,
                 null,
                 null,
+                null,
                 mockPageable
             );
         });
@@ -315,6 +397,7 @@ public class SubmissionServiceUT {
             submissionService.getSubmissionsByPetId(
                 petId, 
                 userId, 
+                null,
                 null,
                 null,
                 null,
@@ -343,6 +426,7 @@ public class SubmissionServiceUT {
                 null,
                 null,
                 null,
+                null,
                 mockPageable
             );
         });
@@ -361,7 +445,7 @@ public class SubmissionServiceUT {
         Page<Submission> mockPage = mock(Page.class);
         when(submissionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        submissionService.getSubmissionsByPetId(petId, userId, null, null, null, null, mockPageable);
+        submissionService.getSubmissionsByPetId(petId, userId, null, null, null, null, null, mockPageable);
         verify(submissionMapper).toSubmissionPage(any(org.springframework.data.domain.Page.class));
     }
 
@@ -373,7 +457,7 @@ public class SubmissionServiceUT {
         when(mockPageable.getPageSize()).thenReturn(16);
 
         assertThrows(InvalidRequestDataException.class, () -> {
-            submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+            submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         });
     }
 
@@ -386,7 +470,7 @@ public class SubmissionServiceUT {
         when(mockPageable.getSort()).thenReturn(Sort.by("invalid_property"));
 
         assertThrows(InvalidRequestDataException.class, () -> {
-            submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+            submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         });
     }
 
@@ -401,7 +485,7 @@ public class SubmissionServiceUT {
         Page<Submission> mockPage = mock(Page.class);
         when(submissionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+        submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         verify(submissionMapper).toSubmissionPage(any(org.springframework.data.domain.Page.class));
     }
 }

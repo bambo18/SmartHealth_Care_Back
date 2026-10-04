@@ -1,10 +1,12 @@
 package com.smarthealthdog.backend.services;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,12 +32,14 @@ import com.smarthealthdog.backend.dto.diagnosis.get.UrineMeasurementResult;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionStatusUpdateRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionUrineTestUpdateRequest;
+import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
 import com.smarthealthdog.backend.exceptions.InternalServerErrorException;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.repositories.LanguageRepository;
 import com.smarthealthdog.backend.repositories.SubmissionRepository;
 import com.smarthealthdog.backend.repositories.SubmissionSpecifications;
+import com.smarthealthdog.backend.utils.ImgUtils;
 import com.smarthealthdog.backend.validation.ErrorCode;
 
 import lombok.RequiredArgsConstructor;
@@ -49,6 +53,11 @@ public class SubmissionService {
     private final DiagnosisService diagnosisService;
     private final UrineMeasurementService urineMeasurementService;
     private final SubmissionMapper submissionMapper;
+    private final ImgUtils imgUtils;
+
+    /** 이미지 서명 URL 유효 기간(초). */
+    @Value("${health-certificate.image.presigned-url-expiration-seconds}")
+    private int imageUrlExpirationSeconds;
 
     private static final int MAX_PAGE_SIZE = 15;
     private static final List<String> ALLOWED_SORT_PROPERTIES = List.of("submittedAt", "completedAt", "status");
@@ -304,6 +313,7 @@ public class SubmissionService {
      * 반려동물 ID로 제출 페이지를 가져옵니다.
      * @param petId 반려동물 ID
      * @param userId 사용자 ID
+     * @param type 제출 유형 필터 (null 이면 모든 유형)
      * @param submittedFrom 제출일 시작 범위
      * @param submittedTo 제출일 종료 범위
      * @param completedFrom 완료일 시작 범위
@@ -313,9 +323,10 @@ public class SubmissionService {
      * @throws InvalidRequestDataException 잘못된 요청 데이터 예외
      */
     public SubmissionPage getSubmissionsByPetId(
-        Long petId, 
-        Long userId, 
-        Instant submittedFrom, 
+        Long petId,
+        Long userId,
+        SubmissionTypeEnum type,
+        Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
         Instant completedTo,
@@ -353,6 +364,7 @@ public class SubmissionService {
             SubmissionSpecifications.filterPetSubmissions(
                 userId,
                 petId,
+                type,
                 submittedFrom,
                 submittedTo,
                 completedFrom,
@@ -367,6 +379,7 @@ public class SubmissionService {
     /**
      * 사용자 ID로 제출 페이지를 가져옵니다.
      * @param userId 사용자 ID
+     * @param type 제출 유형 필터 (null 이면 모든 유형)
      * @param submittedFrom 제출일 시작 범위
      * @param submittedTo 제출일 종료 범위
      * @param completedFrom 완료일 시작 범위
@@ -376,7 +389,8 @@ public class SubmissionService {
      * @throws InvalidRequestDataException 잘못된 요청 데이터 예외
      */
     public SubmissionPage getSubmissionsByUserId(
-        Long userId, 
+        Long userId,
+        SubmissionTypeEnum type,
         Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
@@ -410,6 +424,7 @@ public class SubmissionService {
         Page<Submission> page = submissionRepository.findAll(
             SubmissionSpecifications.filterUserSubmissions(
                 userId,
+                type,
                 submittedFrom,
                 submittedTo,
                 completedFrom,
@@ -466,5 +481,47 @@ public class SubmissionService {
         }
 
         submissionRepository.save(submission);
+    }
+
+    /**
+     * 제출 이미지에 접근할 단기 서명 URL을 발급한다.
+     *
+     * 모든 제출 유형에 공통으로 동작한다.
+     * 진단서 구강 이미지는 이 경로 외에 접근할 방법이 없다 —
+     * getImgUrl 은 CloudFront 무서명 URL 을 반환할 수 있어 절대 쓰지 않는다.
+     *
+     * @param submissionId 제출 ID
+     * @param userId 요청자(소유자) 내부 ID
+     * @return 서명 URL과 만료 초
+     * @throws ResourceNotFoundException 제출이 없거나 타인 소유이거나 삭제됐거나
+     *                                  아직 이미지가 업로드되지 않은 경우 {@code RESOURCE_NOT_FOUND}
+     * @throws IllegalArgumentException submissionId 또는 userId 가 null 인 경우
+     */
+    public ImageUrlResponse getSecureImageUrl(UUID submissionId, Long userId) {
+        if (submissionId == null || userId == null) {
+            throw new IllegalArgumentException("Submission ID 와 User ID 는 null 일 수 없습니다.");
+        }
+
+        // 소유권 검증이 내장된 조회를 재사용한다. 타인 소유면 빈 Optional 이다.
+        Submission submission = getSubmissionByIdAndOwnerId(submissionId, userId);
+
+        if (submission.getStatus() == SubmissionStatus.DELETED) {
+            throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        // createSubmission 은 photoUrl="" 로 행을 만든다.
+        // 업로드 전이거나 업로드가 실패한 행에 서명 URL 을 발급하면
+        // null 또는 깨진 URL 이 프론트로 나간다.
+        String photoKey = submission.getPhotoUrl();
+        if (photoKey == null || photoKey.isBlank()) {
+            throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        Duration ttl = Duration.ofSeconds(imageUrlExpirationSeconds);
+
+        return new ImageUrlResponse(
+            imgUtils.getSecureImgUrl(photoKey, ttl),
+            imageUrlExpirationSeconds
+        );
     }
 }

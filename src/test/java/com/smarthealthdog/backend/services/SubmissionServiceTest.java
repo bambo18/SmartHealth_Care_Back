@@ -1,5 +1,6 @@
 package com.smarthealthdog.backend.services;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -358,7 +360,7 @@ public class SubmissionServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> {
             submissionService.getSubmissionsByPetId(
-                pet.getId(), user.getId(), null, null, null, null, pageable);
+                pet.getId(), user.getId(), null, null, null, null, null, pageable);
         });
     }
 
@@ -376,7 +378,7 @@ public class SubmissionServiceTest {
 
         Pageable pageable = Pageable.ofSize(10);
         SubmissionPage page = submissionService.getSubmissionsByPetId(
-            pet.getId(), user.getId(), null, null, null, null, pageable);
+            pet.getId(), user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 1);
 
         // Create another submission for the same pet
@@ -385,7 +387,7 @@ public class SubmissionServiceTest {
         submissionService.saveSubmission(anotherSubmission);
 
         page = submissionService.getSubmissionsByPetId(
-            pet.getId(), user.getId(), null, null, null, null, pageable);
+            pet.getId(), user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 2);
     }
 
@@ -403,7 +405,7 @@ public class SubmissionServiceTest {
 
         Pageable pageable = Pageable.ofSize(10);
         SubmissionPage page = submissionService.getSubmissionsByUserId(
-            user.getId(), null, null, null, null, pageable);
+            user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 1);
 
         // Create another submission for the same pet
@@ -412,7 +414,113 @@ public class SubmissionServiceTest {
         submissionService.saveSubmission(anotherSubmission);
 
         page = submissionService.getSubmissionsByUserId(
-            user.getId(), null, null, null, null, pageable);
+            user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 2);
+    }
+
+    @Test
+    void getSubmissionsByPetId_type_필터가_해당_유형만_반환한다() {
+        User user = userRepository.findByEmail("email@email.com").orElse(null);
+        assertTrue(user != null);
+
+        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        assertTrue(pet != null);
+
+        // given: 같은 반려동물에 눈 1건, 진단서 1건
+        submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+        Submission cert = submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.HEALTH_CERTIFICATE)
+        );
+
+        SubmissionPage certOnly = submissionService.getSubmissionsByPetId(
+            pet.getId(), user.getId(),
+            SubmissionTypeEnum.HEALTH_CERTIFICATE,
+            null, null, null, null,
+            PageRequest.of(0, 15)
+        );
+
+        assertEquals(1L, certOnly.getTotalElements());
+        assertEquals(cert.getId().toString(), certOnly.getSubmissions().get(0).getSubmissionId());
+    }
+
+    @Test
+    void getSubmissionsByPetId_type이_null이면_모든_유형을_반환한다() {
+        User user = userRepository.findByEmail("email@email.com").orElse(null);
+        assertTrue(user != null);
+
+        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        assertTrue(pet != null);
+
+        submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+        submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.HEALTH_CERTIFICATE)
+        );
+
+        SubmissionPage all = submissionService.getSubmissionsByPetId(
+            pet.getId(), user.getId(),
+            null,
+            null, null, null, null,
+            PageRequest.of(0, 15)
+        );
+
+        assertEquals(2L, all.getTotalElements());
+    }
+
+    @Test
+    void getSubmissionsByUserId_type_필터가_해당_유형만_반환한다() {
+        User user = userRepository.findByEmail("email@email.com").orElse(null);
+        assertTrue(user != null);
+
+        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        assertTrue(pet != null);
+
+        submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+        Submission cert = submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.HEALTH_CERTIFICATE)
+        );
+
+        SubmissionPage certOnly = submissionService.getSubmissionsByUserId(
+            user.getId(),
+            SubmissionTypeEnum.HEALTH_CERTIFICATE,
+            null, null, null, null,
+            PageRequest.of(0, 15)
+        );
+
+        assertEquals(1L, certOnly.getTotalElements());
+        assertEquals(cert.getId().toString(), certOnly.getSubmissions().get(0).getSubmissionId());
+    }
+
+    @Test
+    void getSubmissionsByPetId_삭제된_제출을_제외한다() {
+        // 기존 버그: filterPetSubmissions 는 filterUserSubmissions 와 달리
+        // DELETED 를 제외하지 않아 반려동물별 목록에만 삭제된 제출이 보였다.
+        User user = userRepository.findByEmail("email@email.com").orElse(null);
+        assertTrue(user != null);
+
+        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        assertTrue(pet != null);
+
+        Submission kept = submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+        Submission removed = submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+        submissionService.deleteSubmissionById(removed.getId(), user.getId());
+
+        SubmissionPage page = submissionService.getSubmissionsByPetId(
+            pet.getId(), user.getId(),
+            null, null, null, null, null,
+            PageRequest.of(0, 15)
+        );
+
+        assertEquals(1L, page.getTotalElements());
+        assertEquals(kept.getId().toString(), page.getSubmissions().get(0).getSubmissionId());
     }
 }

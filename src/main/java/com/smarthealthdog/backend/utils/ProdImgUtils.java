@@ -43,7 +43,7 @@ public class ProdImgUtils implements ImgUtils {
             return buildCloudFrontUrl(key);
         }
 
-        return createPresignedUrl(key);
+        return createPresignedUrl(key, Duration.ofHours(1));
     }
 
     /**
@@ -51,7 +51,27 @@ public class ProdImgUtils implements ImgUtils {
      */
     @Override
     public String getImgUrlForAIWorker(String key) {
-        return createPresignedUrl(key);
+        return createPresignedUrl(key, Duration.ofHours(1));
+    }
+
+    /**
+     * 지정한 기간 동안만 유효한 서명 URL을 반환한다.
+     *
+     * CloudFront 분기를 절대 타지 않는다 — 개인정보가 찍힌 이미지를
+     * 무서명·무만료 URL로 공개하는 것을 원천 차단한다 (SPEC 9.2).
+     *
+     * @param key S3 object key
+     * @param ttl 서명 유효 기간
+     * @return 서명 URL. key 가 비어 있으면 null
+     * @throws IllegalArgumentException ttl 이 null 이거나 0 이하인 경우
+     */
+    @Override
+    public String getSecureImgUrl(String key, Duration ttl) {
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            throw new IllegalArgumentException("서명 URL 유효 기간이 유효하지 않습니다.");
+        }
+
+        return createPresignedUrl(key, ttl);
     }
 
     /**
@@ -75,9 +95,9 @@ public class ProdImgUtils implements ImgUtils {
     }
 
     /**
-     * S3 key를 1시간 동안 접근 가능한 presigned URL로 변환한다.
+     * S3 key를 주어진 기간 동안 접근 가능한 presigned URL로 변환한다.
      */
-    private String createPresignedUrl(String key) {
+    private String createPresignedUrl(String key, Duration ttl) {
         if (key == null || key.isBlank()) {
             return null;
         }
@@ -88,7 +108,7 @@ public class ProdImgUtils implements ImgUtils {
                 .build();
 
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofHours(1))
+                .signatureDuration(ttl)
                 .getObjectRequest(getObjectRequest)
                 .build();
 
