@@ -26,6 +26,8 @@ import com.smarthealthdog.backend.validation.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 
@@ -115,21 +117,61 @@ public class S3Uploader implements ImageUploader {
     ) throws IOException {
         Submission submission = event.submission();
 
-        if (event.fileBytes() == null || event.originalFilename() == null || event.contentType() == null) {
-            throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
-        }
-
-        String key;
         try {
-            key = putImageObject("diagnoses/", event.fileBytes());
+            String key = storeSubmissionImage(event, "diagnoses/");
+            submission.setPhotoUrl(key);
+            submissionService.saveSubmission(submission);
         } catch (Exception e) {
             // TODO: 업로드 실패 시, Sentry나 로그 시스템에 알림 전송 기능 필요
             submissionService.failSubmission(submission, SubmissionFailureReasonEnum.SERVICE_ERROR);
             throw new InternalServerErrorException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
+    }
 
-        submission.setPhotoUrl(key);
-        submissionService.saveSubmission(submission);
+    /**
+     * 제출 이미지를 동기적으로 S3에 저장한다.
+     * 비동기 리스너(uploadSubmissionImage)와 완전히 같은 구현을 공유한다.
+     *
+     * @param event 저장할 이미지 바이트를 담은 값 객체
+     * @param prefix S3 키 접두사 (예: "health-certificates/")
+     * @return 저장된 S3 object key
+     * @throws InvalidRequestDataException 바이트가 비었거나 허용 이미지가 아닌 경우
+     *         ({@link ErrorCode#INVALID_IMAGE})
+     */
+    @Override
+    public String storeSubmissionImage(SubmissionImageUploadEvent event, String prefix) {
+        if (event == null || event.fileBytes() == null || event.fileBytes().length == 0) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
+        }
+
+        if (prefix == null || prefix.isBlank()) {
+            throw new IllegalArgumentException("S3 키 접두사가 비어 있습니다.");
+        }
+
+        return putImageObject(prefix, event.fileBytes());
+    }
+
+    /**
+     * 보상 삭제. 이 저장소에서 처음 들어가는 S3 삭제 경로다.
+     *
+     * @param key 삭제할 S3 object key. null·공백이면 아무것도 하지 않는다.
+     */
+    @Override
+    public void delete(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        try {
+            s3Client.deleteObject(
+                DeleteObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build()
+            );
+        } catch (NoSuchKeyException e) {
+            // 이미 없는 객체는 삭제 성공과 같게 취급한다.
+        }
     }
 
     /**
