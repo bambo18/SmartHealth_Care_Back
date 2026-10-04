@@ -126,3 +126,8 @@ reports/
 **/.ipynb_checkpoints/
 .ipynb_checkpoints/
 
+
+# =========================
+# Agent scratch (superpowers SDD workspace)
+# =========================
+.superpowers/
