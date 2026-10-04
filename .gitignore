@@ -131,3 +131,10 @@ reports/
 # Agent scratch (superpowers SDD workspace)
 # =========================
 .superpowers/
+
+# =========================
+# Agent planning docs (local only)
+# =========================
+CLAUDE.md
+PLAN.md
+SPEC.md
