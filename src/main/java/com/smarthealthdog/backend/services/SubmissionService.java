@@ -144,6 +144,48 @@ public class SubmissionService {
     }
 
     /**
+     * 이미 완료된 제출 기록을 만들어 저장합니다. 동기 경로 전용입니다.
+     *
+     * createSubmission 과 달리 photoUrl 과 COMPLETED 상태를 처음부터 채웁니다.
+     * PushAIInferenceTasks 는 status=PENDING AND photoUrl&lt;&gt;'' 인 행만,
+     * RetryAIInferenceTasks 는 PROCESSING 인 행만 집으므로,
+     * 이 상태로 만든 행은 두 배치 중 어느 것도 집지 않습니다.
+     * Celery 큐로 잘못 흘러갈 경로가 구조적으로 없습니다.
+     *
+     * @param pet 반려동물
+     * @param type 제출 유형 (HEALTH_CERTIFICATE 또는 ORAL)
+     * @param photoKey S3 업로드가 끝난 object key
+     * @return 저장된 제출
+     * @throws IllegalArgumentException 인자가 비어 있는 경우
+     */
+    @Transactional
+    public Submission createCompletedSubmission(Pet pet, SubmissionTypeEnum type, String photoKey) {
+        if (pet == null || type == null) {
+            throw new IllegalArgumentException("Pet 과 type 은 null 일 수 없습니다.");
+        }
+
+        // 동기 경로는 S3 업로드가 끝난 뒤에만 이 메서드를 호출합니다.
+        // 빈 키가 들어왔다면 호출 순서 버그입니다.
+        if (photoKey == null || photoKey.isBlank()) {
+            throw new IllegalArgumentException("photoKey 가 비어 있습니다. S3 업로드가 선행되어야 합니다.");
+        }
+
+        Instant now = Instant.now();
+
+        Submission submission = Submission.builder()
+                .id(UuidCreator.getTimeOrderedEpoch())
+                .type(type)
+                .pet(pet)
+                .photoUrl(photoKey)
+                .status(SubmissionStatus.COMPLETED)
+                .submittedAt(now)
+                .completedAt(now)
+                .build();
+
+        return submissionRepository.save(submission);
+    }
+
+    /**
      * 제출을 삭제 상태로 업데이트합니다.
      * @param submissionId 제출 ID
      * @param userId 사용자 ID

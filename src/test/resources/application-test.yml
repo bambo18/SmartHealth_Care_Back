@@ -117,16 +117,6 @@ kakao:
     redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/callback}
     token-uri: https://kauth.kakao.com/oauth/token
 
-# clients/naver/* 가 기본값 없이 주입하므로, 이 키들이 없으면
-# @SpringBootTest 컨텍스트가 환경변수 없이는 뜨지 않는다.
-naver:
-  search:
-    client-id: ${NAVER_SEARCH_CLIENT_ID:test-search-client-id}
-    client-secret: ${NAVER_SEARCH_CLIENT_SECRET:test-search-client-secret}
-  maps:
-    client-id: ${NAVER_MAPS_CLIENT_ID:test-maps-client-id}
-    client-secret: ${NAVER_MAPS_CLIENT_SECRET:test-maps-client-secret}
-
 upload:
   image:
     max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032} # 7MB
@@ -139,6 +129,16 @@ ocr:
   # 반려동물을 여러 마리 등록해 우회할 수 있다.
   user-interval:
     seconds: ${OCR_USER_INTERVAL_SECONDS:30}
+  google:
+    api-key: ${GOOGLE_VISION_API_KEY:test-api-key}
+    # 엔드포인트 기본값은 절대 외부로 나가지 않는 로컬 주소다 —
+    # 테스트가 실수로 과금되는 실제 Vision 호출을 하지 않게 하는 안전장치.
+    endpoint: ${GOOGLE_VISION_ENDPOINT:http://localhost:9999/v1/images:annotate}
+    language-hint: ko
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+  certificate:
+    min-confidence: 0.75
 
 
 # 진단서 이미지 접근용 단기 서명 URL

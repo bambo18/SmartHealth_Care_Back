@@ -190,6 +190,18 @@ ocr:
   # 반려동물을 여러 마리 등록해 우회할 수 있다.
   user-interval:
     seconds: ${OCR_USER_INTERVAL_SECONDS:30}
+  google:
+    # GCP 콘솔에서 Cloud Vision API 를 활성화한 뒤 발급한 API 키.
+    # 반드시 "API 제한"에서 Cloud Vision API 만 허용하도록 제한한다.
+    api-key: ${GOOGLE_VISION_API_KEY}
+    endpoint: https://vision.googleapis.com/v1/images:annotate
+    # 한국어 진단서이므로 languageHints 로 ko 를 명시한다.
+    language-hint: ko
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+  certificate:
+    # 전체 평균 신뢰도 임계값. 미달이면 OCR_RECOGNITION_FAILED 로 거부한다.
+    min-confidence: 0.75
 
 
 # 진단서 이미지 접근용 단기 서명 URL

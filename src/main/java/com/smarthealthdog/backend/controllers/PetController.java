@@ -21,12 +21,16 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.smarthealthdog.backend.domain.Pet;
+import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.dto.CreatePetRequest;
 import com.smarthealthdog.backend.dto.PartialUpdatePetRequest;
 import com.smarthealthdog.backend.dto.PetResponse;
 import com.smarthealthdog.backend.dto.UpdatePetRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateCreatedResponse;
+import com.smarthealthdog.backend.dto.health.HealthCertificateMapper;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.services.AIDiagnosisClientService;
+import com.smarthealthdog.backend.services.HealthCertificateService;
 import com.smarthealthdog.backend.services.PetService;
 import com.smarthealthdog.backend.utils.ImgUtils;
 import com.smarthealthdog.backend.validation.ErrorCode;
@@ -41,6 +45,8 @@ public class PetController {
 
     private final PetService petService;
     private final AIDiagnosisClientService aiDiagnosisClientService;
+    private final HealthCertificateService healthCertificateService;
+    private final HealthCertificateMapper healthCertificateMapper;
 
     /**
      * PetResponse를 만들 때 DB에 저장된 S3 key를
@@ -175,5 +181,27 @@ public class PetController {
         aiDiagnosisClientService.performUrineDiagnosis(image, id, ownerId);
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /**
+     * 건강검진표(진단서) 이미지 제출 — 동기 OCR.
+     *
+     * 눈·소변과 달리 201 에 전체 객체를 담는다. 프론트가 이 응답을
+     * 그대로 수정 화면에 띄울 수 있어야 하기 때문이다.
+     */
+    @PostMapping("/{id}/submissions/certificate")
+    @PreAuthorize("hasAuthority('can_use_health_check')")
+    public ResponseEntity<HealthCertificateCreatedResponse> addHealthCertificate(
+            @PathVariable Long id,
+            @RequestPart(value = "image") MultipartFile image,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long ownerId = Long.parseLong(userDetails.getUsername());
+
+        PetHealthCertificate certificate = healthCertificateService.register(image, id, ownerId);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(healthCertificateMapper.toCreatedResponse(certificate));
     }
 }

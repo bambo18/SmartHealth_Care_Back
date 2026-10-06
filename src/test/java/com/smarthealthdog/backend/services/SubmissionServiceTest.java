@@ -523,4 +523,72 @@ public class SubmissionServiceTest {
         assertEquals(1L, page.getTotalElements());
         assertEquals(kept.getId().toString(), page.getSubmissions().get(0).getSubmissionId());
     }
+
+    @Test
+    void createCompletedSubmission_처음부터_COMPLETED_상태로_만든다() {
+        Pet pet = 소유_반려동물();
+
+        Submission submission = submissionService.createCompletedSubmission(
+            pet,
+            SubmissionTypeEnum.HEALTH_CERTIFICATE,
+            "health-certificates/abc.jpg"
+        );
+
+        assertTrue(submission.getId() != null);
+        assertEquals(SubmissionStatus.COMPLETED, submission.getStatus());
+        assertEquals(SubmissionTypeEnum.HEALTH_CERTIFICATE, submission.getType());
+        assertEquals("health-certificates/abc.jpg", submission.getPhotoUrl());
+        assertTrue(submission.getSubmittedAt() != null);
+        assertTrue(submission.getCompletedAt() != null);
+        assertTrue(submission.getFailureReason() == null);
+
+        // 저장까지 끝났는지 확인한다 (createSubmission 과 달리 저장 전 상태를 돌려주지 않는다).
+        assertTrue(submissionRepository.findById(submission.getId()).isPresent());
+    }
+
+    @Test
+    void createCompletedSubmission_배치가_집어가지_않는_상태여야_한다() {
+        // PushAIInferenceTasks 는 status=PENDING AND photoUrl<>'' 인 행만 집는다.
+        // 동기 경로의 행이 Celery 큐로 흘러가면 안 된다.
+        Pet pet = 소유_반려동물();
+
+        submissionService.createCompletedSubmission(
+            pet, SubmissionTypeEnum.HEALTH_CERTIFICATE, "health-certificates/abc.jpg"
+        );
+
+        List<Submission> waiting = submissionRepository.findSubmissionsWaitingToBeProcessedByAmount(
+            SubmissionStatus.PENDING,
+            PageRequest.of(0, 100)
+        );
+
+        assertTrue(waiting.isEmpty(), "동기 경로 행이 Celery 대기 목록에 들어가면 안 된다");
+    }
+
+    @Test
+    void createCompletedSubmission_photoKey가_비면_예외를_던진다() {
+        // 동기 경로는 S3 업로드가 끝난 뒤에만 호출되므로 빈 키는 호출 순서 버그다.
+        Pet pet = 소유_반려동물();
+
+        assertThrows(IllegalArgumentException.class, () ->
+            submissionService.createCompletedSubmission(
+                pet, SubmissionTypeEnum.HEALTH_CERTIFICATE, ""
+            )
+        );
+
+        assertThrows(IllegalArgumentException.class, () ->
+            submissionService.createCompletedSubmission(
+                pet, SubmissionTypeEnum.HEALTH_CERTIFICATE, null
+            )
+        );
+    }
+
+    private Pet 소유_반려동물() {
+        User user = userRepository.findByEmail("email@email.com").orElse(null);
+        assertTrue(user != null);
+
+        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        assertTrue(pet != null);
+
+        return pet;
+    }
 }
