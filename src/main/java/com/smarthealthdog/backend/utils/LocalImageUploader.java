@@ -80,7 +80,7 @@ public class LocalImageUploader implements ImageUploader {
     public void uploadSubmissionImage(SubmissionImageUploadEvent event) throws IOException {
         String key;
         try {
-            key = saveFile(event.fileBytes(), event.originalFilename(), "diagnoses/");
+            key = storeSubmissionImage(event, "diagnoses/");
         } catch (IOException e) {
             submissionService.failSubmission(event.submission(), SubmissionFailureReasonEnum.SERVICE_ERROR);
             return;
@@ -88,6 +88,39 @@ public class LocalImageUploader implements ImageUploader {
 
         event.submission().setPhotoUrl(key);
         submissionService.saveSubmission(event.submission());
+    }
+
+    /**
+     * 제출 이미지를 동기로 저장하고 로컬 저장소 기준 key 를 반환한다.
+     * @param event 업로드할 이미지 정보
+     * @param prefix 하위 디렉터리 (예: "health-certificates/")
+     * @return 저장된 파일의 상대 경로
+     * @throws IOException 파일 저장 중 오류 발생 시
+     */
+    @Override
+    public String storeSubmissionImage(SubmissionImageUploadEvent event, String prefix) throws IOException {
+        if (event == null) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
+        }
+
+        return saveFile(event.fileBytes(), event.originalFilename(), prefix);
+    }
+
+    /**
+     * 보상 삭제. 존재하지 않는 파일은 무시한다.
+     * @param key 삭제할 파일의 상대 경로
+     */
+    @Override
+    public void delete(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        try {
+            Files.deleteIfExists(uploadDir.resolve(key));
+        } catch (IOException e) {
+            // 보상 삭제 실패는 요청을 실패시키지 않는다. 고아 파일 정리는 후속 과제다.
+        }
     }
 
     // Helper to save file bytes to a sub-directory

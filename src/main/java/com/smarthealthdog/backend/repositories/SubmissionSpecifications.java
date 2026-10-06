@@ -5,6 +5,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,6 +77,7 @@ public class SubmissionSpecifications {
      * @param submittedTo 제출일 종료 범위 (null 가능)
      * @param completedFrom 완료일 시작 범위 (null 가능)
      * @param completedTo 완료일 종료 범위 (null 가능)
+     * @param type 제출 유형 (null 가능 — null 이면 유형을 가리지 않는다)
      * @return 서브미션 필터링을 위한 Specification 객체
      */
     public static Specification<Submission> filterUserSubmissions(
@@ -83,7 +85,8 @@ public class SubmissionSpecifications {
         Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
-        Instant completedTo
+        Instant completedTo,
+        SubmissionTypeEnum type
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -117,6 +120,11 @@ public class SubmissionSpecifications {
 
             // 4. Mandatory Filter: Exclude Deleted Submissions
             predicates.add(cb.notEqual(root.get("status"), SubmissionStatus.DELETED));
+
+            // 5. Dynamic Filter: Submission Type
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
             
             // NOTE: To prevent the "N+1 select" problem, you still need to fetch joins.
             // This is done outside the predicate building, typically using the 'query' object:
@@ -137,6 +145,7 @@ public class SubmissionSpecifications {
      * @param submittedTo 제출일 종료 범위 (null 가능)
      * @param completedFrom 완료일 시작 범위 (null 가능)
      * @param completedTo 완료일 종료 범위 (null 가능)
+     * @param type 제출 유형 (null 가능 — null 이면 유형을 가리지 않는다)
      * @return 서브미션 필터링을 위한 Specification 객체
      */
     public static Specification<Submission> filterPetSubmissions(
@@ -145,7 +154,8 @@ public class SubmissionSpecifications {
         Instant submittedFrom,
         Instant submittedTo,
         Instant completedFrom,
-        Instant completedTo
+        Instant completedTo,
+        SubmissionTypeEnum type
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -179,7 +189,17 @@ public class SubmissionSpecifications {
                 predicates.add(cb.lessThanOrEqualTo(root.get("completedAt"), completedTo));
             }
             // If both are null, no filter is added for completedAt
-            
+
+            // 5. Dynamic Filter: Submission Type
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+
+            // 6. Mandatory Filter: Exclude Deleted Submissions
+            // filterUserSubmissions 와 동작을 맞춘다. 반려동물 기준 목록에서만 삭제된 제출이
+            // 보이던 비대칭을 없앤다.
+            predicates.add(cb.notEqual(root.get("status"), SubmissionStatus.DELETED));
+
             // NOTE: To prevent the "N+1 select" problem, you still need to fetch joins.
             // This is done outside the predicate building, typically using the 'query' object:
             if (query.getResultType() != Long.class && query.getResultType() != long.class) {
