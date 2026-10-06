@@ -37,7 +37,6 @@ public enum PermissionEnum {
 
     // --- Search Permissions ---
     CAN_VIEW_SHELTERS("can_view_shelters", "보호소 목록 보기"),
-    CAN_VIEW_HOSPITALS("can_view_hospitals", "병원 목록 보기"),
 
     // --- Shelter Account Permissions ---
     CAN_VIEW_SHELT_PROFILE("can_view_shelter_profile", "보호소 프로필 보기"),
