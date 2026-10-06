@@ -29,6 +29,7 @@ import com.smarthealthdog.backend.dto.diagnosis.get.UrineMeasurementResult;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionStatusUpdateRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionUrineTestUpdateRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
 import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
 import com.smarthealthdog.backend.services.SubmissionService;
 
@@ -148,6 +149,22 @@ public class SubmissionController {
     ) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(submissionService.getSubmissionAndDiagnosesById(submissionId, languageCode, userId));
+    }
+
+    /**
+     * 진단서 상세 조회.
+     *
+     * 눈 소변과 동일한 SubmissionDetail 포장으로 반환한다.
+     * photoUrl 은 항상 null 이며, 이미지는 GET /{id}/image 로만 받는다.
+     */
+    @GetMapping("/{id}/certificate")
+    @PreAuthorize("hasAuthority('can_view_own_health_records')")
+    public ResponseEntity<SubmissionDetail<HealthCertificateResult>> getCertificateSubmissionById(
+            @PathVariable("id") UUID submissionId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(submissionService.getSubmissionAndCertificateById(submissionId, userId));
     }
 
     /** 제출 이미지 단기 서명 URL. 모든 제출 유형에 공통으로 동작한다. */

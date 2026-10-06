@@ -2,7 +2,12 @@ spring:
   application:
     name: backend
   datasource:
-    url: jdbc:h2:mem:testdb;TIME ZONE=UTC
+    # TIME ZONE=UTC 를 걸지 않는다.
+    # JVM 이 Asia/Seoul 인 상태에서 세션만 UTC 로 두면, Hibernate 가 LocalDate 를
+    # java.sql.Date 로 바인딩할 때는 JVM 타임존을, 읽을 때는 세션 타임존을 써서
+    # DATE 컬럼이 하루 밀린다 (2020-10-28 저장 → 2020-10-27 조회).
+    # Instant 는 UTC 로 저장되므로 세션 타임존과 무관하다.
+    url: jdbc:h2:mem:testdb
     username: sa
     driver-class-name: org.h2.Driver
   jpa:

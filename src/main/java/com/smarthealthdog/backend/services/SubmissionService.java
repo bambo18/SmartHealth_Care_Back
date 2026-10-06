@@ -19,6 +19,7 @@ import com.smarthealthdog.backend.domain.ConditionTranslation;
 import com.smarthealthdog.backend.domain.Diagnosis;
 import com.smarthealthdog.backend.domain.Language;
 import com.smarthealthdog.backend.domain.Pet;
+import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionFailureReasonEnum;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
@@ -32,11 +33,14 @@ import com.smarthealthdog.backend.dto.diagnosis.get.UrineMeasurementResult;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionStatusUpdateRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionUrineTestUpdateRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateMapper;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
 import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
 import com.smarthealthdog.backend.exceptions.InternalServerErrorException;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.repositories.LanguageRepository;
+import com.smarthealthdog.backend.repositories.PetHealthCertificateRepository;
 import com.smarthealthdog.backend.repositories.SubmissionRepository;
 import com.smarthealthdog.backend.repositories.SubmissionSpecifications;
 import com.smarthealthdog.backend.utils.ImgUtils;
@@ -54,6 +58,8 @@ public class SubmissionService {
     private final UrineMeasurementService urineMeasurementService;
     private final SubmissionMapper submissionMapper;
     private final ImgUtils imgUtils;
+    private final PetHealthCertificateRepository petHealthCertificateRepository;
+    private final HealthCertificateMapper healthCertificateMapper;
 
     /** 이미지 서명 URL 유효 기간(초). */
     @Value("${health-certificate.image.presigned-url-expiration-seconds}")
@@ -539,6 +545,51 @@ public class SubmissionService {
      *                                  아직 이미지가 업로드되지 않은 경우 {@code RESOURCE_NOT_FOUND}
      * @throws IllegalArgumentException submissionId 또는 userId 가 null 인 경우
      */
+    /**
+     * 진단 ID로 제출 정보와 진단서 기록을 함께 가져옵니다.
+     *
+     * 기존 getSubmissionAndDiagnosesById 와 같은 SubmissionDetail 포장으로 반환하므로
+     * 프론트가 눈 소변과 동일한 코드로 다룰 수 있습니다.
+     *
+     * 응답의 photoUrl 은 항상 null 입니다 — 이미지는 getSecureImageUrl 로만 받습니다.
+     *
+     * @param submissionId 제출 ID
+     * @param userId 요청자(소유자) 내부 ID
+     * @return 제출 정보와 진단서 결과
+     * @throws ResourceNotFoundException 제출이 없거나 타인 소유이거나 삭제됐거나
+     *         진단서 기록이 없는 경우 {@code RESOURCE_NOT_FOUND},
+     *         진단서 기록이 아직 없는 경우 {@code HEALTH_CERTIFICATE_NOT_FOUND}
+     * @throws IllegalArgumentException submissionId 또는 userId 가 null 인 경우
+     */
+    public SubmissionDetail<HealthCertificateResult> getSubmissionAndCertificateById(
+            UUID submissionId, Long userId) {
+        if (submissionId == null || userId == null) {
+            throw new IllegalArgumentException("Submission ID 와 User ID 는 null 일 수 없습니다.");
+        }
+
+        // 소유권 검증이 내장된 조회를 재사용한다. 타인 소유면 빈 Optional 이다.
+        Submission submission = getSubmissionByIdAndOwnerId(submissionId, userId);
+
+        if (submission.getStatus() == SubmissionStatus.DELETED) {
+            throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        // 유형이 다른 제출에 이 엔드포인트를 쓰면 빈 결과가 나가는 대신 404 로 끊는다.
+        if (submission.getType() != SubmissionTypeEnum.HEALTH_CERTIFICATE) {
+            throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        PetHealthCertificate certificate = petHealthCertificateRepository
+                .findBySubmissionId(submissionId)
+                .orElseThrow(() ->
+                    new ResourceNotFoundException(ErrorCode.HEALTH_CERTIFICATE_NOT_FOUND));
+
+        return submissionMapper.toSubmissionDetailForCertificate(
+            submission,
+            healthCertificateMapper.toResult(certificate)
+        );
+    }
+
     public ImageUrlResponse getSecureImageUrl(UUID submissionId, Long userId) {
         if (submissionId == null || userId == null) {
             throw new IllegalArgumentException("Submission ID 와 User ID 는 null 일 수 없습니다.");

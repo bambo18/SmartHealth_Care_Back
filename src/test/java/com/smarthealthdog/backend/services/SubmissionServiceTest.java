@@ -1,6 +1,7 @@
 package com.smarthealthdog.backend.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +28,7 @@ import com.smarthealthdog.backend.domain.Permission;
 import com.smarthealthdog.backend.domain.PermissionEnum;
 import com.smarthealthdog.backend.domain.Pet;
 import com.smarthealthdog.backend.domain.PetGender;
+import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.domain.PetSpecies;
 import com.smarthealthdog.backend.domain.Role;
 import com.smarthealthdog.backend.domain.RoleEnum;
@@ -35,9 +38,12 @@ import com.smarthealthdog.backend.domain.SubmissionStatus;
 import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.domain.User;
 import com.smarthealthdog.backend.dto.CreatePetRequest;
+import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionDetail;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionPage;
 import com.smarthealthdog.backend.dto.diagnosis.update.DiagnosisResultDto;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
+import com.smarthealthdog.backend.dto.health.ocr.HealthCertificateOcrResult;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.repositories.ConditionRepository;
@@ -45,6 +51,7 @@ import com.smarthealthdog.backend.repositories.ConditionTranslationRepository;
 import com.smarthealthdog.backend.repositories.DiagnosisRepository;
 import com.smarthealthdog.backend.repositories.LanguageRepository;
 import com.smarthealthdog.backend.repositories.PermissionRepository;
+import com.smarthealthdog.backend.repositories.PetHealthCertificateRepository;
 import com.smarthealthdog.backend.repositories.PetRepository;
 import com.smarthealthdog.backend.repositories.RoleRepository;
 import com.smarthealthdog.backend.repositories.SubmissionRepository;
@@ -59,6 +66,9 @@ public class SubmissionServiceTest {
 
     @Autowired
     private SubmissionService submissionService; 
+
+    @Autowired
+    private HealthCertificateWriter healthCertificateWriter;
 
     @Autowired
     private UserService userService;
@@ -77,6 +87,9 @@ public class SubmissionServiceTest {
 
     @Autowired
     private PermissionRepository permissionRepository;
+
+    @Autowired
+    private PetHealthCertificateRepository petHealthCertificateRepository;
 
     @Autowired
     private PetRepository petRepository;
@@ -146,12 +159,15 @@ public class SubmissionServiceTest {
 
     @BeforeEach
     void beforeEach() {
+        // pet_health_certificates 가 submissions 를 FK 로 참조하므로 먼저 지운다.
+        petHealthCertificateRepository.deleteAll();
         diagnosisRepository.deleteAll();
         submissionRepository.deleteAll();
     }
 
     @AfterAll
     void cleanup() {
+        petHealthCertificateRepository.deleteAll();
         diagnosisRepository.deleteAll();
         conditionTranslationRepository.deleteAll();
         languageRepository.deleteAll();
@@ -582,13 +598,149 @@ public class SubmissionServiceTest {
         );
     }
 
-    private Pet 소유_반려동물() {
+    @Test
+    void getSubmissionAndCertificateById_12개_항목을_SubmissionDetail로_반환한다() {
+        Pet pet = 소유_반려동물();
+        PetHealthCertificate saved = healthCertificateWriter.persist(
+            pet, "health-certificates/abc.jpg", 정상_OCR결과()
+        );
+
+        SubmissionDetail<HealthCertificateResult> detail =
+            submissionService.getSubmissionAndCertificateById(
+                saved.getSubmission().getId(), 소유자().getId()
+            );
+
+        assertEquals(SubmissionTypeEnum.HEALTH_CERTIFICATE, detail.getType());
+        assertEquals(SubmissionStatus.COMPLETED.name(), detail.getStatus());
+        assertEquals(pet.getId(), detail.getPetInfo().getId());
+        assertEquals(1, detail.getResults().size());
+
+        HealthCertificateResult result = detail.getResults().iterator().next();
+        assertEquals("심장비대", result.diseaseName());
+        assertEquals("2020.10.28", result.diagnosedDateText());
+        assertEquals(LocalDate.of(2020, 10, 28), result.diagnosedDate());
+        assertEquals("초코", result.animalName());
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_photoUrl을_항상_null로_둔다() {
+        // ProdImgUtils.getImgUrl 은 CloudFront 무서명 무만료 URL 을 반환한다.
+        // 진단서에는 견주 성명 주소가 찍혀 있어 그 URL 이 나가면 영구 공개 링크가 된다.
+        // 이미지는 GET /{id}/image 로만 받게 해 그 경로를 원천 차단한다.
+        Pet pet = 소유_반려동물();
+        PetHealthCertificate saved = healthCertificateWriter.persist(
+            pet, "health-certificates/abc.jpg", 정상_OCR결과()
+        );
+
+        SubmissionDetail<HealthCertificateResult> detail =
+            submissionService.getSubmissionAndCertificateById(
+                saved.getSubmission().getId(), 소유자().getId()
+            );
+
+        assertNull(detail.getPhotoUrl(), "진단서 상세에 이미지 URL 이 나가면 안 된다");
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_날짜_파싱_실패시_DATE는_null이고_원문은_남는다() {
+        Pet pet = 소유_반려동물();
+        HealthCertificateOcrResult 파싱실패 = new HealthCertificateOcrResult(
+            "초코", null, null, null, null, null, null,
+            "심장비대",
+            null, "20Z0.1O.28",
+            null, "20Z0.1O.28",
+            null, null,
+            0.91, true
+        );
+        PetHealthCertificate saved = healthCertificateWriter.persist(
+            pet, "health-certificates/abc.jpg", 파싱실패
+        );
+
+        SubmissionDetail<HealthCertificateResult> detail =
+            submissionService.getSubmissionAndCertificateById(
+                saved.getSubmission().getId(), 소유자().getId()
+            );
+
+        HealthCertificateResult result = detail.getResults().iterator().next();
+        assertNull(result.diagnosedDate());
+        assertEquals("20Z0.1O.28", result.diagnosedDateText());
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_타인의_제출이면_404다() {
+        Pet pet = 소유_반려동물();
+        PetHealthCertificate saved = healthCertificateWriter.persist(
+            pet, "health-certificates/abc.jpg", 정상_OCR결과()
+        );
+
+        Long 남의_아이디 = 소유자().getId() + 999L;
+
+        assertThrows(ResourceNotFoundException.class, () ->
+            submissionService.getSubmissionAndCertificateById(
+                saved.getSubmission().getId(), 남의_아이디
+            )
+        );
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_유형이_다른_제출이면_404다() {
+        // 눈 진단 제출에 이 엔드포인트를 쓰면 빈 결과가 나가는 대신 404 로 끊는다.
+        Pet pet = 소유_반려동물();
+        Submission eye = submissionService.saveSubmission(
+            submissionService.createSubmission(pet, SubmissionTypeEnum.EYE)
+        );
+
+        assertThrows(ResourceNotFoundException.class, () ->
+            submissionService.getSubmissionAndCertificateById(eye.getId(), 소유자().getId())
+        );
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_삭제된_제출이면_404다() {
+        Pet pet = 소유_반려동물();
+        PetHealthCertificate saved = healthCertificateWriter.persist(
+            pet, "health-certificates/abc.jpg", 정상_OCR결과()
+        );
+        submissionService.deleteSubmissionById(saved.getSubmission().getId(), 소유자().getId());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+            submissionService.getSubmissionAndCertificateById(
+                saved.getSubmission().getId(), 소유자().getId()
+            )
+        );
+    }
+
+    @Test
+    void getSubmissionAndCertificateById_인자가_null이면_IllegalArgumentException이다() {
+        assertThrows(IllegalArgumentException.class, () ->
+            submissionService.getSubmissionAndCertificateById(null, 소유자().getId())
+        );
+        assertThrows(IllegalArgumentException.class, () ->
+            submissionService.getSubmissionAndCertificateById(UUID.randomUUID(), null)
+        );
+    }
+
+    private User 소유자() {
         User user = userRepository.findByEmail("email@email.com").orElse(null);
         assertTrue(user != null);
 
-        Pet pet = petService.listByOwner(user.getId()).stream().findFirst().orElse(null);
+        return user;
+    }
+
+    private Pet 소유_반려동물() {
+        Pet pet = petService.listByOwner(소유자().getId()).stream().findFirst().orElse(null);
         assertTrue(pet != null);
 
         return pet;
+    }
+
+    private static HealthCertificateOcrResult 정상_OCR결과() {
+        return new HealthCertificateOcrResult(
+            "초코", "Canine", "Pug", "Castrated Male", "흰색", "16년 3개월", null,
+            "심장비대",
+            LocalDate.of(2020, 10, 28), "2020.10.28",
+            LocalDate.of(2020, 10, 28), "2020.10.28",
+            "예후 소견", "비고",
+            0.9124, true
+        );
     }
 }
