@@ -47,7 +47,14 @@ public enum ErrorCode {
     INVALID_PATH_VARIABLE("요청 경로 변수의 형식이 올바르지 않습니다."),
 
     // 날짜 파라미터 관련 오류
-    INVALID_DATE_RANGE("날짜 범위가 올바르지 않습니다. 시작 날짜는 종료 날짜 이전이어야 합니다.");
+    INVALID_DATE_RANGE("날짜 범위가 올바르지 않습니다. 시작 날짜는 종료 날짜 이전이어야 합니다."),
+
+    // 건강검진표(진단서) OCR 관련 오류
+    OCR_RECOGNITION_FAILED("진단서를 인식하지 못했습니다. 더 밝고 선명한 사진으로 다시 시도해주세요."),
+    OCR_REQUIRED_FIELD_MISSING("진단서에서 병명 또는 진단 연원일을 찾지 못했습니다."),
+    NOT_A_HEALTH_CERTIFICATE("진단서 양식으로 보이지 않는 이미지입니다."),
+    OCR_SERVICE_UNAVAILABLE("인식 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
+    HEALTH_CERTIFICATE_NOT_FOUND("건강검진 기록을 찾을 수 없습니다.");
 
     private final String message;
 

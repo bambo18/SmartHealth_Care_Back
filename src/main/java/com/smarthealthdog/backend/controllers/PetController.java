@@ -25,8 +25,10 @@ import com.smarthealthdog.backend.dto.CreatePetRequest;
 import com.smarthealthdog.backend.dto.PartialUpdatePetRequest;
 import com.smarthealthdog.backend.dto.PetResponse;
 import com.smarthealthdog.backend.dto.UpdatePetRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.services.AIDiagnosisClientService;
+import com.smarthealthdog.backend.services.HealthCertificateService;
 import com.smarthealthdog.backend.services.PetService;
 import com.smarthealthdog.backend.utils.ImgUtils;
 import com.smarthealthdog.backend.validation.ErrorCode;
@@ -41,6 +43,7 @@ public class PetController {
 
     private final PetService petService;
     private final AIDiagnosisClientService aiDiagnosisClientService;
+    private final HealthCertificateService healthCertificateService;
 
     /**
      * PetResponse를 만들 때 DB에 저장된 S3 key를
@@ -175,5 +178,25 @@ public class PetController {
         aiDiagnosisClientService.performUrineDiagnosis(image, id, ownerId);
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /**
+     * 건강검진표(진단서) 이미지 제출
+     *
+     * 동기 처리다 — OCR 인식까지 끝난 뒤에 응답하며, 인식에 실패하면 아무것도 저장되지 않는다.
+     * 눈·소변과 달리 생성된 submission_id 를 응답에 담아 프론트가 바로 수정 화면을 띄울 수 있게 한다.
+     */
+    @PostMapping("/{id}/submissions/certificate")
+    @PreAuthorize("hasAuthority('can_use_health_check')")
+    public ResponseEntity<HealthCertificateResult> addHealthCertificate(
+            @PathVariable Long id,
+            @RequestPart(value = "image") MultipartFile image,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long ownerId = Long.parseLong(userDetails.getUsername());
+
+        HealthCertificateResult result = healthCertificateService.register(image, id, ownerId);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 }

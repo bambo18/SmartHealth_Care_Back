@@ -24,8 +24,10 @@ import org.springframework.web.multipart.MultipartException;
 
 import com.smarthealthdog.backend.dto.ErrorMessage;
 import com.smarthealthdog.backend.exceptions.ForbiddenException;
+import com.smarthealthdog.backend.exceptions.InternalServerErrorException;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
+import com.smarthealthdog.backend.exceptions.ServiceUnavailableException;
 import com.smarthealthdog.backend.validation.ErrorCode;
 import com.smarthealthdog.backend.validation.ValidErrorCodeFinder;
 
@@ -228,6 +230,38 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
             .status(HttpStatus.FORBIDDEN)
+            .body(errorResponseBody);
+    }
+
+    // 503 에러 처리 - 외부 서비스(OCR 등) 일시 장애
+    @ExceptionHandler(ServiceUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ResponseEntity<ErrorMessage> handleServiceUnavailableException(ServiceUnavailableException e) {
+        log.error("외부 서비스를 사용할 수 없습니다: {}", e.getErrorCode().name(), e);
+
+        ErrorMessage errorResponseBody = new ErrorMessage(
+            List.of(e.getErrorCode().name()),
+            List.of(e.getErrorCode().getMessage())
+        );
+
+        return ResponseEntity
+            .status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(errorResponseBody);
+    }
+
+    // 500 에러 처리 - 전용 핸들러가 없어 catch-all 로 떨어지던 예외
+    @ExceptionHandler(InternalServerErrorException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResponseEntity<ErrorMessage> handleInternalServerErrorException(InternalServerErrorException e) {
+        log.error("내부 서버 오류: {}", e.getErrorCode().name(), e);
+
+        ErrorMessage errorResponseBody = new ErrorMessage(
+            List.of(e.getErrorCode().name()),
+            List.of(e.getErrorCode().getMessage())
+        );
+
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(errorResponseBody);
     }
 

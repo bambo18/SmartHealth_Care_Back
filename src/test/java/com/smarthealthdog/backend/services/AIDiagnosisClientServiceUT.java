@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Optional;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -77,8 +79,8 @@ public class AIDiagnosisClientServiceUT {
         when(mockPet.getOwner()).thenReturn(mockOwner);
 
         when(petService.get(1L)).thenReturn(mockPet);
-        when(submissionService.getMostRecentSubmissionByPet(mockPet))
-            .thenThrow(new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND)); // Simulate no recent submission
+        when(submissionService.getMostRecentSubmissionByPetAndType(mockPet, SubmissionTypeEnum.EYE))
+            .thenReturn(Optional.empty()); // Simulate no recent submission
 
         // No exception should be thrown
         aiDiagnosisClientService.performEyeDiagnosis(null, 1L, 1L);

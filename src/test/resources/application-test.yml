@@ -1,6 +1,10 @@
 spring:
   application:
     name: backend
+  servlet:
+    multipart:
+      max-file-size: 7MB
+      max-request-size: 9MB
   datasource:
     url: jdbc:h2:mem:testdb;TIME ZONE=UTC
     username: sa
@@ -111,3 +115,34 @@ kakao:
     client-secret: ${KAKAO_CLIENT_SECRET:test-client-secret}
     redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/callback}
     token-uri: https://kauth.kakao.com/oauth/token
+
+upload:
+  image:
+    max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032}
+
+ocr:
+  google:
+    api-key: ${GOOGLE_VISION_API_KEY:test-api-key}
+    # 테스트가 실수로 과금되는 실제 Vision 호출을 하지 않도록 로컬 주소를 기본값으로 둔다.
+    endpoint: ${GOOGLE_VISION_ENDPOINT:http://localhost:9999/v1/images:annotate}
+    language-hint: ko
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+  certificate:
+    min-confidence: 0.75
+  user-interval:
+    seconds: ${OCR_USER_INTERVAL_SECONDS:30}
+
+health-certificate:
+  image:
+    presigned-url-expiration-seconds: ${HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS:300}
+
+# clients/naver 의 @Value 에는 기본값이 없어, 이 블록이 없으면
+# @SpringBootTest 컨텍스트가 환경변수 없이는 아예 뜨지 않는다.
+naver:
+  search:
+    client-id: ${NAVER_SEARCH_CLIENT_ID:test-naver-search-client-id}
+    client-secret: ${NAVER_SEARCH_CLIENT_SECRET:test-naver-search-client-secret}
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID:test-naver-maps-client-id}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET:test-naver-maps-client-secret}
