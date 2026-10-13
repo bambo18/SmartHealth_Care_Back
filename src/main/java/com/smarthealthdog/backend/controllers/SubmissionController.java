@@ -127,7 +127,7 @@ public class SubmissionController {
     @PreAuthorize("hasAuthority('can_update_health_records')")
     public ResponseEntity<Void> updateSubmissionStatus(
             @PathVariable("id") UUID submissionId,
-            @RequestBody SubmissionStatusUpdateRequest statusUpdateRequest
+            @Valid @RequestBody SubmissionStatusUpdateRequest statusUpdateRequest
     ) {
         submissionService.updateSubmissionStatusAfterInference(submissionId, statusUpdateRequest);
         return ResponseEntity.ok().build();

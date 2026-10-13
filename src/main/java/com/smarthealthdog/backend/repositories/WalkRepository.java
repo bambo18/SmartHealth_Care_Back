@@ -1,9 +1,10 @@
 package com.smarthealthdog.backend.repositories;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,15 +13,30 @@ import com.smarthealthdog.backend.domain.Walk;
 
 public interface WalkRepository extends JpaRepository<Walk, Long> {
 
-    // 전체 + 최신순/오래된순
-    List<Walk> findByPetIdOrderByStartTimeDesc(Long petId);
-    List<Walk> findByPetIdOrderByStartTimeAsc(Long petId);
-
     // 기간 + 최신순/오래된순
     List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeDesc(
-            Long petId, OffsetDateTime start, OffsetDateTime end);
+            Long petId, Instant start, Instant end);
     List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
-            Long petId, OffsetDateTime start, OffsetDateTime end);
+            Long petId, Instant start, Instant end);
+
+        @Query(value = """
+        SELECT w FROM Walk w
+        WHERE w.pet.id = :petId
+          AND (:startInclusive IS NULL OR w.startTime >= :startInclusive)
+          AND (:endExclusive IS NULL OR w.startTime < :endExclusive)
+        """,
+        countQuery = """
+        SELECT COUNT(w) FROM Walk w
+        WHERE w.pet.id = :petId
+          AND (:startInclusive IS NULL OR w.startTime >= :startInclusive)
+          AND (:endExclusive IS NULL OR w.startTime < :endExclusive)
+        """)
+        Page<Walk> findByPetIdAndStartTimeRange(
+            @Param("petId") Long petId,
+            @Param("startInclusive") Instant startInclusive,
+            @Param("endExclusive") Instant endExclusive,
+            Pageable pageable
+        );
 
     /** 주간 합계용 네이티브 프로젝션 */
     public interface WeeklyAggRow {

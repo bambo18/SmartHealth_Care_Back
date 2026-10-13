@@ -2,9 +2,7 @@ package com.smarthealthdog.backend.services;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +10,9 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -121,69 +122,39 @@ public class WalkService {
     // ============================================================
 
     @Transactional(readOnly = true)
-    public List<Walk> listByPet(
+        public Page<Walk> listByPet(
             Long petId,
-                        Long userId,
-            OffsetDateTime start,
-            OffsetDateTime end,
-            String sortBy
+            Long userId,
+            Instant startInclusive,
+            Instant endExclusive,
+            String sortBy,
+            Integer limit,
+            Integer offset
     ) {
-
-                Pet pet = petService.get(petId);
-
-                if (!pet.getOwner().getId().equals(userId)) {
-                        throw new ResourceNotFoundException(
-                                        ErrorCode.RESOURCE_NOT_FOUND
-                        );
-                }
-
-        String sort =
-                (sortBy == null || sortBy.isBlank())
-                        ? "date_desc"
-                        : sortBy;
-
-        if (start == null && end == null) {
-
-            return switch (sort) {
-
-                case "date_asc" ->
-                        walkRepository
-                                .findByPetIdOrderByStartTimeAsc(petId);
-
-                default ->
-                        walkRepository
-                                .findByPetIdOrderByStartTimeDesc(petId);
-            };
+        Pet pet = petService.get(petId);
+        if (!pet.getOwner().getId().equals(userId)) {
+            throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        OffsetDateTime startSafe =
-                (start != null)
-                        ? start
-                        : OffsetDateTime.MIN;
+        if (limit == null || limit <= 0 || limit > 50 || offset == null || offset < 0) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
 
-        OffsetDateTime endSafe =
-                (end != null)
-                        ? end
-                        : OffsetDateTime.MAX;
+        Sort.Direction direction = "date_asc".equals(sortBy)
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+        Pageable pageable = new OffsetBasedPageable(
+                offset,
+                limit,
+                Sort.by(direction, "startTime")
+        );
 
-        return switch (sort) {
-
-            case "date_asc" ->
-                    walkRepository
-                            .findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
-                                    petId,
-                                    startSafe,
-                                    endSafe
-                            );
-
-            default ->
-                    walkRepository
-                            .findByPetIdAndStartTimeBetweenOrderByStartTimeDesc(
-                                    petId,
-                                    startSafe,
-                                    endSafe
-                            );
-        };
+        return walkRepository.findByPetIdAndStartTimeRange(
+                petId,
+                startInclusive,
+                endExclusive,
+                pageable
+        );
     }
 
 
@@ -662,7 +633,7 @@ public class WalkService {
                         .plusSeconds(
                                 7 * 24 * 3600
                         )
-                        .minusSeconds(1);
+                        .minusNanos(1);
 
 
         // 사용자 소유 반려동물
@@ -682,14 +653,8 @@ public class WalkService {
                             .findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
 
                                     pet.getId(),
-
-                                    startOfWeek.atOffset(
-                                            ZoneOffset.UTC
-                                    ),
-
-                                    endOfWeek.atOffset(
-                                            ZoneOffset.UTC
-                                    )
+                                            startOfWeek,
+                                            endOfWeek
                             )
             );
         }
@@ -772,4 +737,66 @@ public class WalkService {
                 value * 10.0
         ) / 10.0;
     }
+
+        private static final class OffsetBasedPageable implements Pageable {
+                private final int offset;
+                private final int pageSize;
+                private final Sort sort;
+
+                private OffsetBasedPageable(int offset, int pageSize, Sort sort) {
+                        this.offset = offset;
+                        this.pageSize = pageSize;
+                        this.sort = sort;
+                }
+
+                @Override
+                public int getPageNumber() {
+                        return offset / pageSize;
+                }
+
+                @Override
+                public int getPageSize() {
+                        return pageSize;
+                }
+
+                @Override
+                public long getOffset() {
+                        return offset;
+                }
+
+                @Override
+                public Sort getSort() {
+                        return sort;
+                }
+
+                @Override
+                public Pageable next() {
+                        return new OffsetBasedPageable(offset + pageSize, pageSize, sort);
+                }
+
+                @Override
+                public Pageable previousOrFirst() {
+                        return hasPrevious()
+                                        ? new OffsetBasedPageable(offset - pageSize, pageSize, sort)
+                                        : first();
+                }
+
+                @Override
+                public Pageable first() {
+                        return new OffsetBasedPageable(0, pageSize, sort);
+                }
+
+                @Override
+                public Pageable withPage(int pageNumber) {
+                        if (pageNumber < 0) {
+                                throw new IllegalArgumentException("Page index must not be less than zero");
+                        }
+                        return new OffsetBasedPageable(pageNumber * pageSize, pageSize, sort);
+                }
+
+                @Override
+                public boolean hasPrevious() {
+                        return offset > 0;
+                }
+        }
 }
