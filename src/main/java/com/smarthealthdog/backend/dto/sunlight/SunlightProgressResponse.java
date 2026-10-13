@@ -37,7 +37,7 @@ public record SunlightProgressResponse(
         int qualifiedWindows,
 
         /*
-         * 오늘 계산에 사용된 조도 샘플 수
+         * 해당 날짜 계산에 사용된 조도 샘플 수
          */
         @JsonProperty("sample_count")
         int sampleCount,
