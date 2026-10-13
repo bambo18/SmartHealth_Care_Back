@@ -18,6 +18,7 @@ import com.smarthealthdog.backend.domain.Pet;
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionFailureReasonEnum;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 
 import jakarta.transaction.Transactional;
 
@@ -55,6 +56,10 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
     Page<Submission> findAll(Specification<Submission> spec, Pageable pageable);
     Optional<Submission> findById(UUID id);
     Optional<Submission> findTopByPetOrderBySubmittedAtDesc(Pet pet);
+
+    // 유형을 가리지 않는 위 쿼리는 제출 유형 사이에 교차 간섭을 만든다.
+    // 빈도 제한은 같은 유형끼리만 비교해야 한다.
+    Optional<Submission> findTopByPetAndTypeOrderBySubmittedAtDesc(Pet pet, SubmissionTypeEnum type);
 
     // Create a custom query that fetches Submission with Pet with User eagerly
     @Query("SELECT s FROM Submission s JOIN FETCH s.pet p JOIN FETCH p.owner u WHERE s.id = :id")

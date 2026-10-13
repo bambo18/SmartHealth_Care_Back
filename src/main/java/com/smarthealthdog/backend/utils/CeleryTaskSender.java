@@ -16,7 +16,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smarthealthdog.backend.domain.PetSpecies;
 import com.smarthealthdog.backend.domain.Submission;
-import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.dto.diagnosis.celery.CeleryMessage;
 import com.smarthealthdog.backend.dto.diagnosis.celery.DeliveryInfo;
 import com.smarthealthdog.backend.dto.diagnosis.celery.MessageHeaders;
@@ -48,18 +47,22 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
             List<String> celeryMessages = requestDataList.stream()
                 .map(data -> {
                     try {
-                        if (data.submission().getType() == SubmissionTypeEnum.EYE) {
-                            return generateCeleryMessageForEyeTest(
+                        // switch 로 두어 새 제출 유형이 조용히 소변 분기로 빠지지 않게 한다.
+                        return switch (data.submission().getType()) {
+                            case EYE -> generateCeleryMessageForEyeTest(
                                 data.imageUrl(),
                                 data.submission().getId(),
                                 data.submission().getPet().getSpecies()
                             );
-                        } else {
-                            return generateCeleryMessageForUrineTest(
+                            case URINE -> generateCeleryMessageForUrineTest(
                                 data.imageUrl(),
                                 data.submission().getId()
                             );
-                        }
+                            // 동기 처리 유형은 Celery 큐를 타지 않는다. 여기에 도달하면 버그다.
+                            case HEALTH_CERTIFICATE -> throw new IllegalStateException(
+                                "HEALTH_CERTIFICATE 제출은 Celery 큐로 보낼 수 없습니다: " + data.submission().getId()
+                            );
+                        };
                     } catch (JsonProcessingException e) {
                         throw new RuntimeException(e);
                     }

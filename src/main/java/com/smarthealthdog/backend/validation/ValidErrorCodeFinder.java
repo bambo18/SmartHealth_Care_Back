@@ -22,6 +22,7 @@ public class ValidErrorCodeFinder {
     private final SubmissionUrineTestUpdateRequestErrorCode submissionUrineTestUpdateRequestErrorCode;
     private final UserCreateRequestErrorCode userCreateRequestErrorCode;
     private final UpdateUserProfileRequestErrorCode updateUserProfileRequestErrorCode;
+    private final UpdateHealthCertificateRequestErrorCode updateHealthCertificateRequestErrorCode;
 
     public List<ErrorCode> findErrorCode(MethodArgumentNotValidException e) {
         if (e == null) {
@@ -53,6 +54,8 @@ public class ValidErrorCodeFinder {
                 return userCreateRequestErrorCode.getErrorCode(e);
             case "UpdateUserProfileRequest":
                 return updateUserProfileRequestErrorCode.getErrorCode(e);
+            case "UpdateHealthCertificateRequest":
+                return updateHealthCertificateRequestErrorCode.getErrorCode(e);
             default:
                 return List.of(ErrorCode.INVALID_INPUT);
         }

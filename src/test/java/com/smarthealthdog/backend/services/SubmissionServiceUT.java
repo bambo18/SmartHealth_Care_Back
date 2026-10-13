@@ -297,6 +297,7 @@ public class SubmissionServiceUT {
                 null,
                 null,
                 null,
+                null,
                 mockPageable
             );
         });
@@ -315,6 +316,7 @@ public class SubmissionServiceUT {
             submissionService.getSubmissionsByPetId(
                 petId, 
                 userId, 
+                null,
                 null,
                 null,
                 null,
@@ -343,6 +345,7 @@ public class SubmissionServiceUT {
                 null,
                 null,
                 null,
+                null,
                 mockPageable
             );
         });
@@ -361,7 +364,7 @@ public class SubmissionServiceUT {
         Page<Submission> mockPage = mock(Page.class);
         when(submissionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        submissionService.getSubmissionsByPetId(petId, userId, null, null, null, null, mockPageable);
+        submissionService.getSubmissionsByPetId(petId, userId, null, null, null, null, null, mockPageable);
         verify(submissionMapper).toSubmissionPage(any(org.springframework.data.domain.Page.class));
     }
 
@@ -373,7 +376,7 @@ public class SubmissionServiceUT {
         when(mockPageable.getPageSize()).thenReturn(16);
 
         assertThrows(InvalidRequestDataException.class, () -> {
-            submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+            submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         });
     }
 
@@ -386,7 +389,7 @@ public class SubmissionServiceUT {
         when(mockPageable.getSort()).thenReturn(Sort.by("invalid_property"));
 
         assertThrows(InvalidRequestDataException.class, () -> {
-            submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+            submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         });
     }
 
@@ -401,7 +404,7 @@ public class SubmissionServiceUT {
         Page<Submission> mockPage = mock(Page.class);
         when(submissionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        submissionService.getSubmissionsByUserId(userId, null, null, null, null, mockPageable);
+        submissionService.getSubmissionsByUserId(userId, null, null, null, null, null, mockPageable);
         verify(submissionMapper).toSubmissionPage(any(org.springframework.data.domain.Page.class));
     }
 }

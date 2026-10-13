@@ -2,6 +2,7 @@ package com.smarthealthdog.backend.services;
 
 import java.io.IOException;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +23,13 @@ import lombok.RequiredArgsConstructor;
 @Service
 public class FileUploadService {
     private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * 업로드 용량 상한. spring.servlet.multipart.max-file-size 와 반드시 같은 값이어야 한다.
+     * 코드에 상한을 박아 두면 컨테이너 상한과 서로 다른 값을 주장하게 된다.
+     */
+    @Value("${upload.image.max-size-bytes}")
+    private long maxFileSize;
 
     /**
      * S3 버킷에 프로필 사진 업로드
@@ -114,8 +122,7 @@ public class FileUploadService {
             throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
         }
 
-        // 파일 크기 검사 (예: 최대 5MB)
-        long maxFileSize = 5 * 1024 * 1024; // 5MB
+        // 파일 크기 검사 (상한의 단일 출처는 yml 이다)
         if (file.getSize() > maxFileSize) {
             throw new InvalidRequestDataException(ErrorCode.INVALID_IMAGE);
         }

@@ -47,16 +47,7 @@ public class AIDiagnosisClientService {
             throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        // 가장 최근 제출 정보 확인
-        try {
-            Submission recentSubmission = submissionService.getMostRecentSubmissionByPet(pet);
-            long secondsSinceLastSubmission = Duration.between(recentSubmission.getSubmittedAt(), Instant.now()).getSeconds();
-            if (secondsSinceLastSubmission < inferenceIntervalSeconds) {
-                throw new InvalidRequestDataException(ErrorCode.REQUEST_TOO_FREQUENT);
-            }
-        } catch (ResourceNotFoundException e) {
-            // 최근 제출 정보가 없는 경우 무시
-        }
+        checkSubmissionInterval(pet, SubmissionTypeEnum.EYE);
 
         Submission submissionBuild = submissionService.createSubmission(pet, SubmissionTypeEnum.EYE);
         Submission submission = submissionService.saveSubmission(submissionBuild);
@@ -85,21 +76,33 @@ public class AIDiagnosisClientService {
             throw new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        // 가장 최근 제출 정보 확인
-        try {
-            Submission recentSubmission = submissionService.getMostRecentSubmissionByPet(pet);
-            long secondsSinceLastSubmission = Duration.between(recentSubmission.getSubmittedAt(), Instant.now()).getSeconds();
-            if (secondsSinceLastSubmission < inferenceIntervalSeconds) {
-                throw new InvalidRequestDataException(ErrorCode.REQUEST_TOO_FREQUENT);
-            }
-        } catch (ResourceNotFoundException e) {
-            // 최근 제출 정보가 없는 경우 무시
-        }
+        checkSubmissionInterval(pet, SubmissionTypeEnum.URINE);
 
         Submission submissionBuild = submissionService.createSubmission(pet, SubmissionTypeEnum.URINE);
         Submission submission = submissionService.saveSubmission(submissionBuild);
 
         // 진단 이미지 업로드
         fileUploadService.updateDiagnosisImage(submission, imageFile);
+    }
+
+    /**
+     * 같은 유형의 가장 최근 제출을 기준으로 요청 간격을 검사합니다.
+     *
+     * 유형을 가리지 않고 검사하면 진단서를 올린 직후 눈 진단이 거부되는 교차 간섭이 생깁니다.
+     *
+     * @param pet 반려동물 정보
+     * @param type 제출 유형
+     * @throws InvalidRequestDataException 요청 간격이 너무 짧은 경우
+     */
+    private void checkSubmissionInterval(Pet pet, SubmissionTypeEnum type) {
+        submissionService.getMostRecentSubmissionByPetAndType(pet, type)
+            .ifPresent(recentSubmission -> {
+                long secondsSinceLastSubmission =
+                    Duration.between(recentSubmission.getSubmittedAt(), Instant.now()).getSeconds();
+
+                if (secondsSinceLastSubmission < inferenceIntervalSeconds) {
+                    throw new InvalidRequestDataException(ErrorCode.REQUEST_TOO_FREQUENT);
+                }
+            });
     }
 }

@@ -1,7 +1,9 @@
 package com.smarthealthdog.backend.dto.diagnosis.get;
 
+import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.UrineMeasurement;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
 import com.smarthealthdog.backend.utils.ImgUtils;
 
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,7 @@ import com.smarthealthdog.backend.domain.Diagnosis;
 import com.smarthealthdog.backend.domain.ConditionTranslation;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
@@ -88,6 +91,47 @@ public class SubmissionMapper {
             measurements.stream()
                 .map(this::toUrineMeasurementResult)
                 .collect(Collectors.toSet())
+        );
+    }
+
+    /**
+     * 건강검진표(진단서) 상세 응답으로 변환한다.
+     *
+     * photoUrl 은 항상 null 이다 — 진단서 이미지는 소유권 검증 후 단기 서명 URL 을 돌려주는
+     * 전용 엔드포인트로만 제공한다. 무서명 URL 이 새어나갈 경로를 원천 차단하기 위해서다.
+     *
+     * @param submission 제출 정보
+     * @param certificate 진단서 결과
+     * @return 진단서 상세 응답
+     */
+    public SubmissionDetail<HealthCertificateResult> toSubmissionDetailForCertificate(
+            Submission submission,
+            PetHealthCertificate certificate
+    ) {
+        if (submission == null) {
+            throw new IllegalArgumentException("서브미션이 null일 수 없습니다.");
+        }
+
+        if (certificate == null) {
+            throw new IllegalArgumentException("진단서가 null일 수 없습니다.");
+        }
+
+        SubmissionSummaryPetInfo petInfo = new SubmissionSummaryPetInfo(
+            submission.getPet().getId(),
+            submission.getPet().getName(),
+            submission.getPet().getSpecies()
+        );
+
+        return new SubmissionDetail<HealthCertificateResult>(
+            submission.getId(),
+            petInfo,
+            submission.getType(),
+            null,
+            submission.getStatus().name(),
+            submission.getSubmittedAt(),
+            submission.getCompletedAt(),
+            submission.getFailureReason(),
+            Set.of(HealthCertificateResult.from(certificate))
         );
     }
 

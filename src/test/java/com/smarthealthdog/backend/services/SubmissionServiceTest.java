@@ -358,7 +358,7 @@ public class SubmissionServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> {
             submissionService.getSubmissionsByPetId(
-                pet.getId(), user.getId(), null, null, null, null, pageable);
+                pet.getId(), user.getId(), null, null, null, null, null, pageable);
         });
     }
 
@@ -376,7 +376,7 @@ public class SubmissionServiceTest {
 
         Pageable pageable = Pageable.ofSize(10);
         SubmissionPage page = submissionService.getSubmissionsByPetId(
-            pet.getId(), user.getId(), null, null, null, null, pageable);
+            pet.getId(), user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 1);
 
         // Create another submission for the same pet
@@ -385,7 +385,7 @@ public class SubmissionServiceTest {
         submissionService.saveSubmission(anotherSubmission);
 
         page = submissionService.getSubmissionsByPetId(
-            pet.getId(), user.getId(), null, null, null, null, pageable);
+            pet.getId(), user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 2);
     }
 
@@ -403,7 +403,7 @@ public class SubmissionServiceTest {
 
         Pageable pageable = Pageable.ofSize(10);
         SubmissionPage page = submissionService.getSubmissionsByUserId(
-            user.getId(), null, null, null, null, pageable);
+            user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 1);
 
         // Create another submission for the same pet
@@ -412,7 +412,7 @@ public class SubmissionServiceTest {
         submissionService.saveSubmission(anotherSubmission);
 
         page = submissionService.getSubmissionsByUserId(
-            user.getId(), null, null, null, null, pageable);
+            user.getId(), null, null, null, null, null, pageable);
         assertTrue(page.getTotalElements() == 2);
     }
 }
