@@ -111,3 +111,13 @@ kakao:
     client-secret: ${KAKAO_CLIENT_SECRET:test-client-secret}
     redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/callback}
     token-uri: https://kauth.kakao.com/oauth/token
+
+# clients/naver 의 @Value 에는 기본값이 없어, 이 블록이 없으면
+# @SpringBootTest 컨텍스트가 환경변수 없이는 아예 뜨지 않는다.
+naver:
+  search:
+    client-id: ${NAVER_SEARCH_CLIENT_ID:test-naver-search-client-id}
+    client-secret: ${NAVER_SEARCH_CLIENT_SECRET:test-naver-search-client-secret}
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID:test-naver-maps-client-id}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET:test-naver-maps-client-secret}
