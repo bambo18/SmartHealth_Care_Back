@@ -13,60 +13,111 @@ import com.smarthealthdog.backend.domain.Walk;
 
 public interface WalkRepository extends JpaRepository<Walk, Long> {
 
-    // 기간 + 최신순/오래된순
-    List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeDesc(
-            Long petId, Instant start, Instant end);
-    List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
-            Long petId, Instant start, Instant end);
+    // ============================================================
+    // 산책 목록 조회
+    // ============================================================
 
-        @Query(value = """
-        SELECT w FROM Walk w
-        WHERE w.pet.id = :petId
-          AND (:startInclusive IS NULL OR w.startTime >= :startInclusive)
-          AND (:endExclusive IS NULL OR w.startTime < :endExclusive)
-        """,
-        countQuery = """
-        SELECT COUNT(w) FROM Walk w
-        WHERE w.pet.id = :petId
-          AND (:startInclusive IS NULL OR w.startTime >= :startInclusive)
-          AND (:endExclusive IS NULL OR w.startTime < :endExclusive)
-        """)
-        Page<Walk> findByPetIdAndStartTimeRange(
-            @Param("petId") Long petId,
-            @Param("startInclusive") Instant startInclusive,
-            @Param("endExclusive") Instant endExclusive,
+    /**
+     * 날짜 조건 없음
+     */
+    Page<Walk> findByPetId(
+            Long petId,
             Pageable pageable
-        );
+    );
 
-    /** 주간 합계용 네이티브 프로젝션 */
-    public interface WeeklyAggRow {
+    /**
+     * 시작 날짜만 있음
+     * startTime >= startInclusive
+     */
+    Page<Walk> findByPetIdAndStartTimeGreaterThanEqual(
+            Long petId,
+            Instant startInclusive,
+            Pageable pageable
+    );
+
+    /**
+     * 종료 날짜만 있음
+     * startTime < endExclusive
+     */
+    Page<Walk> findByPetIdAndStartTimeLessThan(
+            Long petId,
+            Instant endExclusive,
+            Pageable pageable
+    );
+
+    /**
+     * 시작 날짜 + 종료 날짜 모두 있음
+     * startTime >= startInclusive
+     * startTime < endExclusive
+     */
+    Page<Walk> findByPetIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(
+            Long petId,
+            Instant startInclusive,
+            Instant endExclusive,
+            Pageable pageable
+    );
+
+
+    // ============================================================
+    // 기간 조회
+    // ============================================================
+
+    List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeDesc(
+            Long petId,
+            Instant start,
+            Instant end
+    );
+
+    List<Walk> findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
+            Long petId,
+            Instant start,
+            Instant end
+    );
+
+
+    // ============================================================
+    // 주간 합계용 네이티브 프로젝션
+    // ============================================================
+
+    interface WeeklyAggRow {
+
         Long getPetId();
+
         Long getTotalWalks();
+
         Double getTotalDistanceKm();
+
         Long getTotalDurationSec();
     }
 
-    @Query(value = """
-    SELECT
-        w.pet_id AS petId,
-        COUNT(*) AS totalWalks,
-        COALESCE(SUM(w.distance_km), 0) AS totalDistanceKm,
-        COALESCE(SUM(
-            CASE WHEN w.end_time IS NOT NULL
-                THEN EXTRACT(EPOCH FROM (w.end_time - w.start_time))
-                ELSE 0 END
-        ), 0) AS totalDurationSec
-    FROM walks w
-    JOIN pets p ON w.pet_id = p.id
-    WHERE 
-        p.owner_id = :userId 
-        AND w.start_time >= :start
-        AND w.start_time < :end
-    GROUP BY w.pet_id
-        """, nativeQuery = true)
+
+    @Query(
+            value = """
+                    SELECT
+                        w.pet_id AS petId,
+                        COUNT(*) AS totalWalks,
+                        COALESCE(SUM(w.distance_km), 0) AS totalDistanceKm,
+                        COALESCE(SUM(
+                            CASE
+                                WHEN w.end_time IS NOT NULL
+                                THEN EXTRACT(EPOCH FROM (w.end_time - w.start_time))
+                                ELSE 0
+                            END
+                        ), 0) AS totalDurationSec
+                    FROM walks w
+                    JOIN pets p
+                        ON w.pet_id = p.id
+                    WHERE
+                        p.owner_id = :userId
+                        AND w.start_time >= :start
+                        AND w.start_time < :end
+                    GROUP BY w.pet_id
+                    """,
+            nativeQuery = true
+    )
     List<WeeklyAggRow> aggregateByUserAndPeriod(
             @Param("userId") Long userId,
             @Param("start") Instant start,
-            @Param("end")   Instant end);
-
+            @Param("end") Instant end
+    );
 }
