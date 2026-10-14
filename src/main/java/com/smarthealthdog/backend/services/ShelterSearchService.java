@@ -8,6 +8,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.smarthealthdog.backend.clients.naver.NaverReverseGeocodingClient;
+import com.smarthealthdog.backend.clients.naver.NaverReverseGeocodingClient.AdministrativeRegion;
 import com.smarthealthdog.backend.domain.Shelter;
 import com.smarthealthdog.backend.dto.shelter.ShelterItem;
 import com.smarthealthdog.backend.dto.shelter.ShelterItem.Location;
@@ -15,32 +17,53 @@ import com.smarthealthdog.backend.dto.shelter.ShelterSearchResponse;
 import com.smarthealthdog.backend.repositories.ShelterSearchRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
+@Slf4j
 public class ShelterSearchService {
 
-    /*
-     * ShelterSearchResponse의 center가
-     * double primitive 타입이기 때문에
-     * GPS가 없는 경우 응답 형식 유지를 위한 기본 좌표를 사용한다.
-     *
-     * 중요:
-     * 이 좌표는 GPS가 없는 경우 거리 필터에 사용하지 않는다.
-     */
     private static final double DEFAULT_CENTER_LAT =
             37.5665;
 
     private static final double DEFAULT_CENTER_LNG =
             126.9780;
 
+
     private static final double DEFAULT_RADIUS_KM =
             2.0;
 
 
+    /*
+     * 현재 프론트에서 시/군/구 선택 시
+     * radius_km = 100을 전달한다.
+     */
+    private static final double REGION_RADIUS_KM =
+            100.0;
+
+
+    /*
+     * 현재 프론트 전체 보호소 요청:
+     *
+     * radius_km = 1000
+     * limit = 1000
+     */
+    private static final double ALL_RADIUS_KM =
+            1000.0;
+
+
+    private static final int ALL_LIMIT =
+            1000;
+
+
     private final ShelterSearchRepository shelterRepository;
+
+
+    private final NaverReverseGeocodingClient
+            naverReverseGeocodingClient;
 
 
     // ============================================================
@@ -63,10 +86,6 @@ public class ShelterSearchService {
 
     ) {
 
-        // --------------------------------------------------------
-        // 1. 검색 조건 정리
-        // --------------------------------------------------------
-
         String location =
                 normalizeLocation(
                         locationText
@@ -75,17 +94,9 @@ public class ShelterSearchService {
 
         boolean hasCoordinates =
                 lat != null
-                && lng != null;
+                        && lng != null;
 
 
-        /*
-         * GPS가 있는 경우:
-         * 실제 사용자 좌표 사용
-         *
-         * GPS가 없는 경우:
-         * 응답 center 필드를 채우기 위한 값일 뿐이며
-         * 거리 필터에는 사용하지 않는다.
-         */
         double baseLat =
                 hasCoordinates
                         ? lat
@@ -109,6 +120,7 @@ public class ShelterSearchService {
                         && !sortBy.isBlank()
 
                         ? sortBy.trim()
+
                         : "distance";
 
 
@@ -116,8 +128,9 @@ public class ShelterSearchService {
                 limit != null
                         ? Math.min(
                                 limit,
-                                50
+                                1000
                         )
+
                         : 20;
 
 
@@ -128,33 +141,51 @@ public class ShelterSearchService {
 
 
         // --------------------------------------------------------
-        // 2. DB 보호소 조회
+        // 어떤 검색 방식인지 판단
+        // --------------------------------------------------------
+
+        boolean allRequest =
+                isAllRequest(
+                        radiusKm,
+                        limit
+                );
+
+
+        boolean regionRequest =
+                !allRequest
+                        && hasCoordinates
+                        && isRegionRequest(
+                                radiusKm
+                        );
+
+
+        /*
+         * true:
+         *
+         * GPS 기반 일반 거리검색일 경우에만
+         * radius 거리 필터를 적용한다.
+         *
+         * false:
+         *
+         * 전체 / 행정구역 검색에서는
+         * 반경 필터를 하지 않는다.
+         */
+        boolean applyDistanceFilter =
+                false;
+
+
+        // --------------------------------------------------------
+        // DB 조회
         // --------------------------------------------------------
 
         List<Shelter> dbShelters;
 
 
-        /*
-         * location이 없으면:
-         *
-         * 전체 보호소 조회
-         *
-         * location이 있으면:
-         *
-         * province
-         * district
-         * address
-         * name
-         *
-         * 기준 지역 검색
-         */
-        if (location == null) {
+        // ========================================================
+        // 1. location을 직접 전달한 경우
+        // ========================================================
 
-            dbShelters =
-                    shelterRepository
-                            .findAllActive();
-
-        } else {
+        if (location != null) {
 
             dbShelters =
                     shelterRepository
@@ -164,8 +195,66 @@ public class ShelterSearchService {
         }
 
 
+        // ========================================================
+        // 2. 전체 보호소
+        // ========================================================
+        //
+        // 현재 프론트:
+        //
+        // radius_km = 1000
+        // limit = 1000
+        //
+        // ========================================================
+
+        else if (allRequest) {
+
+            dbShelters =
+                    shelterRepository
+                            .findAllActive();
+        }
+
+
+        // ========================================================
+        // 3. 시/군/구 선택
+        // ========================================================
+        //
+        // 현재 프론트:
+        //
+        // radius_km = 100
+        //
+        // 좌표를 Reverse Geocoding해서
+        // 실제 행정구역으로 변환한다.
+        //
+        // ========================================================
+
+        else if (regionRequest) {
+
+            dbShelters =
+                    searchByCoordinatesAsRegion(
+                            lat,
+                            lng
+                    );
+        }
+
+
+        // ========================================================
+        // 4. 일반 GPS 거리검색
+        // ========================================================
+
+        else {
+
+            dbShelters =
+                    shelterRepository
+                            .findAllActive();
+
+
+            applyDistanceFilter =
+                    hasCoordinates;
+        }
+
+
         // --------------------------------------------------------
-        // 3. Shelter Entity → ShelterItem 변환
+        // DTO 변환
         // --------------------------------------------------------
 
         List<ShelterItem> items =
@@ -191,21 +280,25 @@ public class ShelterSearchService {
 
 
             /*
-             * 실제 GPS 좌표가 있을 때만
-             * 사용자와 보호소 사이 거리를 계산한다.
+             * 좌표가 있으면 거리값 자체는 계산한다.
              *
-             * GPS가 없을 때 서울시청 기준의
-             * 가짜 거리를 만들지 않는다.
+             * 지역검색에서는 거리값을 표시용/정렬용으로만 사용하고
+             * 100km 반경 필터는 하지 않는다.
              */
-            if (hasCoordinates
+            if (
+                    hasCoordinates
                     && shelterLat != null
-                    && shelterLng != null) {
+                    && shelterLng != null
+            ) {
 
                 distanceM =
                         (int) Math.round(
+
                                 haversineMeters(
+
                                         baseLat,
                                         baseLng,
+
                                         shelterLat,
                                         shelterLng
                                 )
@@ -214,23 +307,20 @@ public class ShelterSearchService {
 
 
             /*
-             * GPS 검색인 경우에만 반경 필터 적용
-             *
-             * 좌표가 없는 보호소는 정확한 거리 판정이
-             * 불가능하므로 GPS 반경 검색에서는 제외한다.
-             *
-             * 지역검색 / 전체검색에서는 좌표가 없어도
-             * 정상적으로 표시한다.
+             * 일반 GPS 검색인 경우에만
+             * 실제 거리 반경 필터.
              */
-            if (hasCoordinates) {
+            if (applyDistanceFilter) {
 
                 if (distanceM == null) {
                     continue;
                 }
 
 
-                if (distanceM
-                        > radius * 1000) {
+                if (
+                        distanceM
+                                > radius * 1000
+                ) {
 
                     continue;
                 }
@@ -260,15 +350,15 @@ public class ShelterSearchService {
 
                             distanceM,
 
-                            null,       // rating
+                            null,
 
-                            null,       // review_count
+                            null,
 
-                            null,       // website_url
+                            null,
 
-                            null,       // place_url
+                            null,
 
-                            null        // open_now
+                            null
                     );
 
 
@@ -279,7 +369,7 @@ public class ShelterSearchService {
 
 
         // --------------------------------------------------------
-        // 4. 정렬
+        // 정렬
         // --------------------------------------------------------
 
         items.sort(
@@ -302,6 +392,7 @@ public class ShelterSearchService {
                                                     item.review_count() == null
                                                             ? 0
                                                             : item.review_count(),
+
                                             Comparator.reverseOrder()
                                     );
 
@@ -314,6 +405,7 @@ public class ShelterSearchService {
                                                     item.review_count() == null
                                                             ? 0
                                                             : item.review_count(),
+
                                             Comparator.reverseOrder()
                                     )
 
@@ -322,13 +414,11 @@ public class ShelterSearchService {
                                                     item.rating() == null
                                                             ? 0.0
                                                             : item.rating(),
+
                                             Comparator.reverseOrder()
                                     );
 
 
-                    /*
-                     * 기존 API 기본값
-                     */
                     default ->
 
                             Comparator
@@ -342,16 +432,12 @@ public class ShelterSearchService {
         );
 
 
-        // --------------------------------------------------------
-        // 5. 전체 검색 결과 개수
-        // --------------------------------------------------------
-
         int total =
                 items.size();
 
 
         // --------------------------------------------------------
-        // 6. 페이징
+        // Paging
         // --------------------------------------------------------
 
         int fromIndex =
@@ -374,10 +460,6 @@ public class ShelterSearchService {
                         toIndex
                 );
 
-
-        // --------------------------------------------------------
-        // 7. 응답
-        // --------------------------------------------------------
 
         return new ShelterSearchResponse(
 
@@ -403,10 +485,148 @@ public class ShelterSearchService {
 
 
     // ============================================================
-    // location 정규화
+    // 좌표 → 행정구역 → 보호소 조회
     // ============================================================
 
-    private static String normalizeLocation(
+    private List<Shelter> searchByCoordinatesAsRegion(
+
+            double lat,
+            double lng
+
+    ) {
+
+        try {
+
+            AdministrativeRegion region =
+                    naverReverseGeocodingClient
+                            .reverseGeocodeRegion(
+                                    lat,
+                                    lng
+                            );
+
+
+            String province =
+                    normalizeProvince(
+                            region.province()
+                    );
+
+
+            String district =
+                    normalizeDistrict(
+                            region.district()
+                    );
+
+
+            log.info(
+                    "Shelter region search: lat={}, lng={}, province={}, district={}",
+                    lat,
+                    lng,
+                    province,
+                    district
+            );
+
+
+            if (
+                    province != null
+                    && district != null
+            ) {
+
+                return shelterRepository
+                        .searchActiveByAdministrativeRegion(
+                                province,
+                                district
+                        );
+            }
+
+
+            if (district != null) {
+
+                return shelterRepository
+                        .searchActiveByDistrict(
+                                district
+                        );
+            }
+
+
+            if (province != null) {
+
+                return shelterRepository
+                        .searchActiveByProvince(
+                                province
+                        );
+            }
+
+
+            /*
+             * 행정구역을 얻지 못했다면
+             * 잘못된 지역을 보여주는 것보다
+             * 빈 결과를 반환한다.
+             */
+            return List.of();
+
+        } catch (Exception e) {
+
+            log.warn(
+                    "Failed to reverse geocode shelter search coordinates. lat={}, lng={}",
+                    lat,
+                    lng,
+                    e
+            );
+
+
+            /*
+             * 네이버 API 오류 때문에
+             * 서버 전체가 500이 되는 것을 방지한다.
+             */
+            return List.of();
+        }
+    }
+
+
+    // ============================================================
+    // 전체 요청 판별
+    // ============================================================
+
+    private boolean isAllRequest(
+
+            Double radiusKm,
+            Integer limit
+
+    ) {
+
+        return radiusKm != null
+                && radiusKm >= ALL_RADIUS_KM
+
+                && limit != null
+                && limit >= ALL_LIMIT;
+    }
+
+
+    // ============================================================
+    // 지역 선택 요청 판별
+    // ============================================================
+
+    private boolean isRegionRequest(
+            Double radiusKm
+    ) {
+
+        if (radiusKm == null) {
+            return false;
+        }
+
+
+        return Math.abs(
+                radiusKm
+                        - REGION_RADIUS_KM
+        ) < 0.0001;
+    }
+
+
+    // ============================================================
+    // location 문자열 정리
+    // ============================================================
+
+    private String normalizeLocation(
             String location
     ) {
 
@@ -424,10 +644,6 @@ public class ShelterSearchService {
         }
 
 
-        /*
-         * 프론트에서 전체 선택 시
-         * 문자열을 보내는 경우까지 대응
-         */
         if (
                 value.equals("전체")
                 || value.equals("전체 보호소")
@@ -445,10 +661,89 @@ public class ShelterSearchService {
 
 
     // ============================================================
-    // BigDecimal → Double
+    // 시·도 정규화
     // ============================================================
 
-    private static Double toDouble(
+    private String normalizeProvince(
+            String province
+    ) {
+
+        if (province == null) {
+            return null;
+        }
+
+
+        String value =
+                province.trim();
+
+
+        return value.isBlank()
+                ? null
+                : value;
+    }
+
+
+    // ============================================================
+    // 시·군·구 정규화
+    // ============================================================
+    //
+    // NAVER 응답 예:
+    //
+    // 고양시 덕양구
+    // 수원시 영통구
+    // 성남시 분당구
+    //
+    // DB에는:
+    //
+    // 고양시
+    // 수원시
+    // 성남시
+    //
+    // 로 저장되어 있으므로 첫 번째 "시" 단위로 통일한다.
+    //
+    // 서울 양천구 / 마포구처럼
+    // 단독 구 이름은 그대로 유지한다.
+    //
+    // ============================================================
+
+    private String normalizeDistrict(
+            String district
+    ) {
+
+        if (district == null) {
+            return null;
+        }
+
+
+        String value =
+                district.trim();
+
+
+        if (value.isBlank()) {
+            return null;
+        }
+
+
+        String[] parts =
+                value.split(
+                        "\\s+"
+                );
+
+
+        if (
+                parts.length >= 2
+                && parts[0].endsWith("시")
+        ) {
+
+            return parts[0];
+        }
+
+
+        return value;
+    }
+
+
+    private Double toDouble(
             BigDecimal value
     ) {
 
@@ -459,10 +754,10 @@ public class ShelterSearchService {
 
 
     // ============================================================
-    // Haversine 거리 계산
+    // Haversine
     // ============================================================
 
-    private static double haversineMeters(
+    private double haversineMeters(
 
             double lat1,
             double lon1,
@@ -472,7 +767,7 @@ public class ShelterSearchService {
 
     ) {
 
-        double earthRadiusM =
+        double earthRadius =
                 6_371_000.0;
 
 
@@ -489,19 +784,30 @@ public class ShelterSearchService {
 
 
         double a =
-                Math.sin(dLat / 2)
-                        * Math.sin(dLat / 2)
 
-                        + Math.cos(
-                                Math.toRadians(lat1)
-                        )
+                Math.sin(
+                        dLat / 2
+                )
 
-                        * Math.cos(
-                                Math.toRadians(lat2)
-                        )
+                * Math.sin(
+                        dLat / 2
+                )
 
-                        * Math.sin(dLon / 2)
-                        * Math.sin(dLon / 2);
+                + Math.cos(
+                        Math.toRadians(lat1)
+                )
+
+                * Math.cos(
+                        Math.toRadians(lat2)
+                )
+
+                * Math.sin(
+                        dLon / 2
+                )
+
+                * Math.sin(
+                        dLon / 2
+                );
 
 
         double c =
@@ -512,6 +818,6 @@ public class ShelterSearchService {
                 );
 
 
-        return earthRadiusM * c;
+        return earthRadius * c;
     }
 }

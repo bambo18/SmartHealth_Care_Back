@@ -26,35 +26,29 @@ public class ShelterSearchController {
     private static final double MIN_LONGITUDE = -180.0;
     private static final double MAX_LONGITUDE = 180.0;
 
-    private static final double MAX_RADIUS_KM = 100.0;
+    /*
+     * 현재 프론트:
+     *
+     * 전체 보호소
+     * radius_km = 1000
+     *
+     * 지역 선택
+     * radius_km = 100
+     *
+     * 따라서 기존 100km 제한을 1000km까지 허용한다.
+     */
+    private static final double MAX_RADIUS_KM = 1000.0;
 
-    private static final int MAX_LIMIT = 50;
+    /*
+     * 현재 프론트 전체 보호소 요청:
+     *
+     * limit = 1000
+     */
+    private static final int MAX_LIMIT = 1000;
 
 
     private final ShelterSearchService shelterSearchService;
 
-
-    // ============================================================
-    // 보호소 검색
-    // ============================================================
-    //
-    // 예:
-    //
-    // 전체
-    // GET /api/shelters/search
-    //
-    // 지역
-    // GET /api/shelters/search?location=서울
-    // GET /api/shelters/search?location=경기
-    // GET /api/shelters/search?location=고양
-    //
-    // GPS
-    // GET /api/shelters/search
-    //     ?lat=37.65
-    //     &lng=126.83
-    //     &radius_km=10
-    //
-    // ============================================================
 
     @GetMapping("/search")
     @PreAuthorize("isAuthenticated()")
@@ -89,13 +83,6 @@ public class ShelterSearchController {
 
     ) {
 
-        /*
-         * 기존에는 location도 없고 GPS도 없으면
-         * INVALID_INPUT을 반환했다.
-         *
-         * 하지만 파라미터가 없는 요청은
-         * "전체 보호소 조회"로 사용한다.
-         */
         validateSearchParameters(
                 lat,
                 lng,
@@ -123,10 +110,6 @@ public class ShelterSearchController {
     }
 
 
-    // ============================================================
-    // 검색 파라미터 검증
-    // ============================================================
-
     private void validateSearchParameters(
 
             Double lat,
@@ -144,7 +127,9 @@ public class ShelterSearchController {
                 lng != null;
 
 
-        // 위도/경도는 둘 다 있거나 둘 다 없어야 한다.
+        /*
+         * 위도/경도는 둘 다 있어야 한다.
+         */
         if (hasLatitude != hasLongitude) {
 
             throw new InvalidRequestDataException(
@@ -153,7 +138,9 @@ public class ShelterSearchController {
         }
 
 
-        // GPS 범위 검증
+        /*
+         * 좌표 범위
+         */
         if (hasLatitude && (
 
                 !isFinite(lat)
@@ -173,7 +160,9 @@ public class ShelterSearchController {
         }
 
 
-        // 반경 검증
+        /*
+         * 반경
+         */
         if (radiusKm != null && (
 
                 !isFinite(radiusKm)
@@ -189,7 +178,9 @@ public class ShelterSearchController {
         }
 
 
-        // limit 검증
+        /*
+         * limit
+         */
         if (limit != null
                 && (
                     limit <= 0
@@ -202,7 +193,9 @@ public class ShelterSearchController {
         }
 
 
-        // offset 검증
+        /*
+         * offset
+         */
         if (offset != null
                 && offset < 0) {
 
