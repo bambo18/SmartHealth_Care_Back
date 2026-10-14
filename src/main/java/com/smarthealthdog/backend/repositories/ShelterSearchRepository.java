@@ -14,7 +14,7 @@ public interface ShelterSearchRepository
 
 
     // ============================================================
-    // 활성화된 전체 보호소
+    // 활성화된 전체 보호소 조회
     // ============================================================
 
     @Query(
@@ -30,26 +30,33 @@ public interface ShelterSearchRepository
 
 
     // ============================================================
-    // 지역 검색
+    // 지역별 보호소 검색
     // ============================================================
     //
-    // province / district 우선
+    // 검색 대상:
     //
-    // 예:
+    // 1. province
+    //    예: 서울 → 서울특별시
+    //        경기 → 경기도
     //
-    // location = "서울"
-    // → province = "서울특별시" 검색 가능
+    // 2. district
+    //    예: 고양 → 고양시
+    //        마포 → 마포구
     //
-    // location = "경기"
-    // → province = "경기도" 검색 가능
+    // 3. jurisdiction
+    //    실제 시설 소재지와 관할지역이 다른
+    //    위탁 보호소 검색을 위해 사용
     //
-    // location = "고양"
-    // → district = "고양시" 검색 가능
+    //    예:
+    //    한국동물구조관리협회
+    //    실제 소재지 = 경기도 양주시
+    //    관할지역 = 강남구, 서초구, 양천구, 파주시 등
     //
-    // 주소에도 동일 문자열이 들어있는 경우를 대비해
-    // address도 함께 검색한다.
+    // 4. address
     //
-    // 이름 검색도 기존 기능 호환을 위해 유지한다.
+    // 5. name
+    //
+    // is_active = TRUE인 시설만 반환
     //
     // ============================================================
 
@@ -63,6 +70,9 @@ public interface ShelterSearchRepository
                                 ILIKE '%' || :location || '%'
 
                             OR COALESCE(s.district, '')
+                                ILIKE '%' || :location || '%'
+
+                            OR COALESCE(s.jurisdiction, '')
                                 ILIKE '%' || :location || '%'
 
                             OR COALESCE(s.address, '')
