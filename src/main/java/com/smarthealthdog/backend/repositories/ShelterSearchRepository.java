@@ -14,7 +14,7 @@ public interface ShelterSearchRepository
 
 
     // ============================================================
-    // 활성화된 전체 보호소 조회
+    // 전체 활성 보호소
     // ============================================================
 
     @Query(
@@ -30,34 +30,7 @@ public interface ShelterSearchRepository
 
 
     // ============================================================
-    // 지역별 보호소 검색
-    // ============================================================
-    //
-    // 검색 대상:
-    //
-    // 1. province
-    //    예: 서울 → 서울특별시
-    //        경기 → 경기도
-    //
-    // 2. district
-    //    예: 고양 → 고양시
-    //        마포 → 마포구
-    //
-    // 3. jurisdiction
-    //    실제 시설 소재지와 관할지역이 다른
-    //    위탁 보호소 검색을 위해 사용
-    //
-    //    예:
-    //    한국동물구조관리협회
-    //    실제 소재지 = 경기도 양주시
-    //    관할지역 = 강남구, 서초구, 양천구, 파주시 등
-    //
-    // 4. address
-    //
-    // 5. name
-    //
-    // is_active = TRUE인 시설만 반환
-    //
+    // location 문자열 직접 검색
     // ============================================================
 
     @Query(
@@ -88,5 +61,112 @@ public interface ShelterSearchRepository
     List<Shelter> searchActiveByLocation(
             @Param("location")
             String location
+    );
+
+
+    // ============================================================
+    // 시·도 검색
+    // ============================================================
+
+    @Query(
+            value = """
+                    SELECT s.*
+                    FROM shelters s
+                    WHERE s.is_active = TRUE
+                      AND (
+                            COALESCE(s.province, '')
+                                ILIKE '%' || :province || '%'
+
+                            OR COALESCE(s.jurisdiction, '')
+                                ILIKE '%' || :province || '%'
+                      )
+                    ORDER BY s.id ASC
+                    """,
+            nativeQuery = true
+    )
+    List<Shelter> searchActiveByProvince(
+            @Param("province")
+            String province
+    );
+
+
+    // ============================================================
+    // 시·군·구 검색
+    // ============================================================
+
+    @Query(
+            value = """
+                    SELECT s.*
+                    FROM shelters s
+                    WHERE s.is_active = TRUE
+                      AND (
+                            COALESCE(s.district, '')
+                                ILIKE '%' || :district || '%'
+
+                            OR COALESCE(s.jurisdiction, '')
+                                ILIKE '%' || :district || '%'
+                      )
+                    ORDER BY s.id ASC
+                    """,
+            nativeQuery = true
+    )
+    List<Shelter> searchActiveByDistrict(
+            @Param("district")
+            String district
+    );
+
+
+    // ============================================================
+    // 시·도 + 시·군·구 검색
+    // ============================================================
+    //
+    // 예:
+    //
+    // province = 경기도
+    // district = 파주시
+    //
+    // 실제 소재지:
+    // 경기도 양주시
+    //
+    // 관할:
+    // 경기도 파주시
+    //
+    // 이런 관외 위탁 보호소도 jurisdiction으로 검색된다.
+    //
+    // ============================================================
+
+    @Query(
+            value = """
+                    SELECT s.*
+                    FROM shelters s
+                    WHERE s.is_active = TRUE
+                      AND (
+                            (
+                                COALESCE(s.province, '')
+                                    ILIKE '%' || :province || '%'
+
+                                OR COALESCE(s.jurisdiction, '')
+                                    ILIKE '%' || :province || '%'
+                            )
+                            AND
+                            (
+                                COALESCE(s.district, '')
+                                    ILIKE '%' || :district || '%'
+
+                                OR COALESCE(s.jurisdiction, '')
+                                    ILIKE '%' || :district || '%'
+                            )
+                      )
+                    ORDER BY s.id ASC
+                    """,
+            nativeQuery = true
+    )
+    List<Shelter> searchActiveByAdministrativeRegion(
+
+            @Param("province")
+            String province,
+
+            @Param("district")
+            String district
     );
 }
