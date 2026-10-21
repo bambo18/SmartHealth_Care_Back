@@ -26,18 +26,6 @@ public class ShelterSearchController {
     private static final double MIN_LONGITUDE = -180.0;
     private static final double MAX_LONGITUDE = 180.0;
 
-    /*
-     * 현재 프론트:
-     *
-     * 전체 보호소
-     * radius_km = 1000
-     *
-     * 지역 선택
-     * radius_km = 100
-     *
-     * 따라서 기존 100km 제한을 1000km까지 허용한다.
-     */
-    private static final double MAX_RADIUS_KM = 1000.0;
 
     /*
      * 현재 프론트 전체 보호소 요청:
@@ -50,6 +38,21 @@ public class ShelterSearchController {
     private final ShelterSearchService shelterSearchService;
 
 
+    // ============================================================
+    // 보호소 검색
+    // ============================================================
+    //
+    // 조회 범위는 행정구역이 정한다.
+    //
+    // province, district 모두 없음  -> 전체 보호소
+    // province만 있음               -> 해당 시·도 전체
+    // province + district           -> 해당 시·군·구 관할
+    //
+    // lat / lng는 범위를 좁히지 않는다.
+    // 거리 계산과 거리순 정렬에만 쓰인다.
+    //
+    // ============================================================
+
     @GetMapping("/search")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ShelterSearchResponse> search(
@@ -57,12 +60,33 @@ public class ShelterSearchController {
             @RequestParam(required = false)
             String location,
 
+            /*
+             * 사용자가 실제로 선택한 행정구역.
+             *
+             * 좌표를 역지오코딩해서 추측하지 않고
+             * 선택값을 그대로 받는다.
+             */
+            @RequestParam(required = false)
+            String province,
+
+            @RequestParam(required = false)
+            String district,
+
             @RequestParam(required = false)
             Double lat,
 
             @RequestParam(required = false)
             Double lng,
 
+            /*
+             * 더 이상 조회 범위에 사용하지 않는다.
+             *
+             * radius_km = 100 / 1000으로 지역 단계를 구분하던
+             * 방식은 제거되었다.
+             *
+             * 구버전 프론트가 보내도 400이 되지 않도록
+             * 받기만 하고 무시한다.
+             */
             @RequestParam(
                     name = "radius_km",
                     required = false
@@ -86,7 +110,6 @@ public class ShelterSearchController {
         validateSearchParameters(
                 lat,
                 lng,
-                radiusKm,
                 limit,
                 offset
         );
@@ -95,9 +118,10 @@ public class ShelterSearchController {
         ShelterSearchResponse response =
                 shelterSearchService.search(
                         location,
+                        province,
+                        district,
                         lat,
                         lng,
-                        radiusKm,
                         sortBy,
                         limit,
                         offset
@@ -114,7 +138,6 @@ public class ShelterSearchController {
 
             Double lat,
             Double lng,
-            Double radiusKm,
             Integer limit,
             Integer offset
 
@@ -151,24 +174,6 @@ public class ShelterSearchController {
 
                 || lng < MIN_LONGITUDE
                 || lng > MAX_LONGITUDE
-
-        )) {
-
-            throw new InvalidRequestDataException(
-                    ErrorCode.INVALID_INPUT
-            );
-        }
-
-
-        /*
-         * 반경
-         */
-        if (radiusKm != null && (
-
-                !isFinite(radiusKm)
-
-                || radiusKm <= 0
-                || radiusKm > MAX_RADIUS_KM
 
         )) {
 
