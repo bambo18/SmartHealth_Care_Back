@@ -3,7 +3,6 @@ package com.smarthealthdog.backend.services;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,15 +39,13 @@ class WalkServiceUT {
         Pet pet = mock(Pet.class);
         when(pet.getOwner()).thenReturn(owner);
         when(petService.get(7L)).thenReturn(pet);
-        when(walkRepository.findByPetIdAndStartTimeRange(
-                eq(7L), isNull(), isNull(), any(Pageable.class)))
+        when(walkRepository.findByPetId(eq(7L), any(Pageable.class)))
                 .thenReturn(Page.empty());
 
         walkService.listByPet(7L, 42L, null, null, "date_asc", 10, 37);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(walkRepository).findByPetIdAndStartTimeRange(
-                eq(7L), isNull(), isNull(), pageableCaptor.capture());
+        verify(walkRepository).findByPetId(eq(7L), pageableCaptor.capture());
         assertEquals(37L, pageableCaptor.getValue().getOffset());
         assertEquals(10, pageableCaptor.getValue().getPageSize());
         assertEquals(Sort.Direction.ASC, pageableCaptor.getValue().getSort().getOrderFor("startTime").getDirection());

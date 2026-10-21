@@ -8,8 +8,6 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.smarthealthdog.backend.clients.naver.NaverReverseGeocodingClient;
-import com.smarthealthdog.backend.clients.naver.NaverReverseGeocodingClient.AdministrativeRegion;
 import com.smarthealthdog.backend.domain.Shelter;
 import com.smarthealthdog.backend.dto.shelter.ShelterItem;
 import com.smarthealthdog.backend.dto.shelter.ShelterItem.Location;
@@ -26,6 +24,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ShelterSearchService {
 
+    /*
+     * 좌표가 없을 때 응답 center에 채우는 값.
+     *
+     * 조회 범위에는 영향이 없다.
+     */
     private static final double DEFAULT_CENTER_LAT =
             37.5665;
 
@@ -33,51 +36,60 @@ public class ShelterSearchService {
             126.9780;
 
 
-    private static final double DEFAULT_RADIUS_KM =
-            2.0;
-
-
     /*
-     * 현재 프론트에서 시/군/구 선택 시
-     * radius_km = 100을 전달한다.
-     */
-    private static final double REGION_RADIUS_KM =
-            100.0;
-
-
-    /*
-     * 현재 프론트 전체 보호소 요청:
+     * 반경으로 조회 범위를 정하지 않는다.
      *
-     * radius_km = 1000
-     * limit = 1000
+     * 응답 스키마 호환을 위해 필드는 유지하고
+     * 의미 없는 값임을 나타내기 위해 0을 보낸다.
      */
-    private static final double ALL_RADIUS_KM =
-            1000.0;
+    private static final double UNUSED_RADIUS_KM =
+            0.0;
 
 
-    private static final int ALL_LIMIT =
-            1000;
+    /*
+     * 관할구역 문자열 포맷.
+     *
+     * 예:
+     *
+     * 경기도: 구리시, 김포시, 파주시 | 서울특별시: 강남구, 강동구
+     *
+     * 시·도 단위는 파이프로, 시·군·구 단위는 쉼표로 구분된다.
+     */
+    private static final String JURISDICTION_PROVINCE_DELIMITER =
+            "\\|";
+
+    private static final String JURISDICTION_DISTRICT_DELIMITER =
+            ",";
+
+    private static final String JURISDICTION_PROVINCE_SEPARATOR =
+            ":";
 
 
     private final ShelterSearchRepository shelterRepository;
 
 
-    private final NaverReverseGeocodingClient
-            naverReverseGeocodingClient;
-
-
     // ============================================================
     // 보호소 검색
+    // ============================================================
+    //
+    // 조회 범위는 행정구역이 정하고,
+    // 좌표는 거리 계산과 정렬에만 쓴다.
+    //
+    // province, district 모두 없음  -> 전체 보호소
+    // province만 있음               -> 해당 시·도 전체
+    // province + district           -> 해당 시·군·구 관할
+    //
     // ============================================================
 
     public ShelterSearchResponse search(
 
             String locationText,
 
+            String provinceText,
+            String districtText,
+
             Double lat,
             Double lng,
-
-            Double radiusKm,
 
             String sortBy,
 
@@ -89,6 +101,18 @@ public class ShelterSearchService {
         String location =
                 normalizeLocation(
                         locationText
+                );
+
+
+        String province =
+                normalizeProvince(
+                        provinceText
+                );
+
+
+        String district =
+                normalizeDistrict(
+                        districtText
                 );
 
 
@@ -107,12 +131,6 @@ public class ShelterSearchService {
                 hasCoordinates
                         ? lng
                         : DEFAULT_CENTER_LNG;
-
-
-        double radius =
-                radiusKm != null
-                        ? radiusKm
-                        : DEFAULT_RADIUS_KM;
 
 
         String sort =
@@ -141,41 +159,7 @@ public class ShelterSearchService {
 
 
         // --------------------------------------------------------
-        // 어떤 검색 방식인지 판단
-        // --------------------------------------------------------
-
-        boolean allRequest =
-                isAllRequest(
-                        radiusKm,
-                        limit
-                );
-
-
-        boolean regionRequest =
-                !allRequest
-                        && hasCoordinates
-                        && isRegionRequest(
-                                radiusKm
-                        );
-
-
-        /*
-         * true:
-         *
-         * GPS 기반 일반 거리검색일 경우에만
-         * radius 거리 필터를 적용한다.
-         *
-         * false:
-         *
-         * 전체 / 행정구역 검색에서는
-         * 반경 필터를 하지 않는다.
-         */
-        boolean applyDistanceFilter =
-                false;
-
-
-        // --------------------------------------------------------
-        // DB 조회
+        // DB 조회 — 범위는 행정구역만으로 결정한다
         // --------------------------------------------------------
 
         List<Shelter> dbShelters;
@@ -196,49 +180,67 @@ public class ShelterSearchService {
 
 
         // ========================================================
-        // 2. 전체 보호소
+        // 2. province + district -> 시·군·구 관할
         // ========================================================
         //
-        // 현재 프론트:
-        //
-        // radius_km = 1000
-        // limit = 1000
+        // 관외 위탁 보호소도 jurisdiction으로 포함된다.
         //
         // ========================================================
 
-        else if (allRequest) {
+        else if (province != null
+                && district != null) {
 
             dbShelters =
-                    shelterRepository
-                            .findAllActive();
-        }
-
-
-        // ========================================================
-        // 3. 시/군/구 선택
-        // ========================================================
-        //
-        // 현재 프론트:
-        //
-        // radius_km = 100
-        //
-        // 좌표를 Reverse Geocoding해서
-        // 실제 행정구역으로 변환한다.
-        //
-        // ========================================================
-
-        else if (regionRequest) {
-
-            dbShelters =
-                    searchByCoordinatesAsRegion(
-                            lat,
-                            lng
+                    filterByRegion(
+                            shelterRepository
+                                    .searchActiveByAdministrativeRegion(
+                                            province,
+                                            district
+                                    ),
+                            province,
+                            district
                     );
         }
 
 
         // ========================================================
-        // 4. 일반 GPS 거리검색
+        // 3. province만 -> 시·도 전체
+        // ========================================================
+
+        else if (province != null) {
+
+            dbShelters =
+                    filterByRegion(
+                            shelterRepository
+                                    .searchActiveByProvince(
+                                            province
+                                    ),
+                            province,
+                            null
+                    );
+        }
+
+
+        // ========================================================
+        // 4. district만 (프론트가 province를 빠뜨린 경우 방어)
+        // ========================================================
+
+        else if (district != null) {
+
+            dbShelters =
+                    filterByRegion(
+                            shelterRepository
+                                    .searchActiveByDistrict(
+                                            district
+                                    ),
+                            null,
+                            district
+                    );
+        }
+
+
+        // ========================================================
+        // 5. 둘 다 없음 -> 전체 보호소
         // ========================================================
 
         else {
@@ -246,10 +248,6 @@ public class ShelterSearchService {
             dbShelters =
                     shelterRepository
                             .findAllActive();
-
-
-            applyDistanceFilter =
-                    hasCoordinates;
         }
 
 
@@ -280,10 +278,10 @@ public class ShelterSearchService {
 
 
             /*
-             * 좌표가 있으면 거리값 자체는 계산한다.
+             * 좌표가 있으면 거리를 계산한다.
              *
-             * 지역검색에서는 거리값을 표시용/정렬용으로만 사용하고
-             * 100km 반경 필터는 하지 않는다.
+             * 표시용/정렬용이며
+             * 이 값으로 결과를 걸러내지는 않는다.
              */
             if (
                     hasCoordinates
@@ -303,27 +301,6 @@ public class ShelterSearchService {
                                         shelterLng
                                 )
                         );
-            }
-
-
-            /*
-             * 일반 GPS 검색인 경우에만
-             * 실제 거리 반경 필터.
-             */
-            if (applyDistanceFilter) {
-
-                if (distanceM == null) {
-                    continue;
-                }
-
-
-                if (
-                        distanceM
-                                > radius * 1000
-                ) {
-
-                    continue;
-                }
             }
 
 
@@ -468,7 +445,7 @@ public class ShelterSearchService {
                         baseLng
                 ),
 
-                radius,
+                UNUSED_RADIUS_KM,
 
                 sort,
 
@@ -485,140 +462,296 @@ public class ShelterSearchService {
 
 
     // ============================================================
-    // 좌표 → 행정구역 → 보호소 조회
+    // 행정구역 정밀 필터
+    // ============================================================
+    //
+    // DB 쿼리는 인덱스를 쓰기 위한 1차 필터이고,
+    // ILIKE 부분 일치 때문에 두 종류의 오탐이 섞인다.
+    //
+    // 1. 세그먼트 교차
+    //
+    //    jurisdiction = 경기도: 파주시 | 서울특별시: 강남구
+    //
+    //    province=경기도, district=강남구로 조회하면
+    //    두 조건이 서로 다른 세그먼트에 걸려 통과한다.
+    //
+    // 2. 부분 문자열
+    //
+    //    district=서구로 조회하면 강서구가 걸린다.
+    //
+    // 여기서 걸러낸다.
+    //
     // ============================================================
 
-    private List<Shelter> searchByCoordinatesAsRegion(
+    private List<Shelter> filterByRegion(
 
-            double lat,
-            double lng
+            List<Shelter> candidates,
+
+            String province,
+            String district
 
     ) {
 
-        try {
-
-            AdministrativeRegion region =
-                    naverReverseGeocodingClient
-                            .reverseGeocodeRegion(
-                                    lat,
-                                    lng
-                            );
+        List<Shelter> matched =
+                new ArrayList<>();
 
 
-            String province =
-                    normalizeProvince(
-                            region.province()
-                    );
+        for (Shelter shelter : candidates) {
 
-
-            String district =
-                    normalizeDistrict(
-                            region.district()
-                    );
-
-
-            log.info(
-                    "Shelter region search: lat={}, lng={}, province={}, district={}",
-                    lat,
-                    lng,
+            if (matchesRegion(
+                    shelter,
                     province,
                     district
+            )) {
+
+                matched.add(
+                        shelter
+                );
+            }
+        }
+
+
+        if (matched.size() != candidates.size()) {
+
+            log.debug(
+                    "Shelter region filter: province={}, district={}, candidates={}, matched={}",
+                    province,
+                    district,
+                    candidates.size(),
+                    matched.size()
             );
+        }
 
 
-            if (
-                    province != null
-                    && district != null
-            ) {
-
-                return shelterRepository
-                        .searchActiveByAdministrativeRegion(
-                                province,
-                                district
-                        );
-            }
+        return matched;
+    }
 
 
-            if (district != null) {
+    private boolean matchesRegion(
 
-                return shelterRepository
-                        .searchActiveByDistrict(
-                                district
-                        );
-            }
+            Shelter shelter,
 
+            String province,
+            String district
 
-            if (province != null) {
+    ) {
 
-                return shelterRepository
-                        .searchActiveByProvince(
+        /*
+         * 소재지 컬럼으로 맞는 경우
+         */
+        boolean provinceOk =
+                province == null
+                        || provinceMatches(
+                                shelter.getProvince(),
                                 province
                         );
-            }
 
 
-            /*
-             * 행정구역을 얻지 못했다면
-             * 잘못된 지역을 보여주는 것보다
-             * 빈 결과를 반환한다.
-             */
-            return List.of();
-
-        } catch (Exception e) {
-
-            log.warn(
-                    "Failed to reverse geocode shelter search coordinates. lat={}, lng={}",
-                    lat,
-                    lng,
-                    e
-            );
+        boolean districtOk =
+                district == null
+                        || districtMatches(
+                                shelter.getDistrict(),
+                                district
+                        );
 
 
-            /*
-             * 네이버 API 오류 때문에
-             * 서버 전체가 500이 되는 것을 방지한다.
-             */
-            return List.of();
+        if (provinceOk && districtOk) {
+            return true;
         }
+
+
+        /*
+         * 관외 위탁 보호소는 소재지가 다르므로
+         * 관할구역으로 한 번 더 본다.
+         */
+        return jurisdictionCovers(
+                shelter.getJurisdiction(),
+                province,
+                district
+        );
     }
 
 
     // ============================================================
-    // 전체 요청 판별
+    // 관할구역 포함 여부
+    // ============================================================
+    //
+    // 시·도 세그먼트로 끊은 뒤 그 안에서
+    // province와 district가 동시에 맞을 때만 통과시킨다.
+    //
     // ============================================================
 
-    private boolean isAllRequest(
+    private boolean jurisdictionCovers(
 
-            Double radiusKm,
-            Integer limit
+            String jurisdiction,
+
+            String province,
+            String district
 
     ) {
 
-        return radiusKm != null
-                && radiusKm >= ALL_RADIUS_KM
+        if (jurisdiction == null
+                || jurisdiction.isBlank()) {
 
-                && limit != null
-                && limit >= ALL_LIMIT;
-    }
-
-
-    // ============================================================
-    // 지역 선택 요청 판별
-    // ============================================================
-
-    private boolean isRegionRequest(
-            Double radiusKm
-    ) {
-
-        if (radiusKm == null) {
             return false;
         }
 
 
-        return Math.abs(
-                radiusKm
-                        - REGION_RADIUS_KM
-        ) < 0.0001;
+        for (String segment : jurisdiction.split(
+                JURISDICTION_PROVINCE_DELIMITER
+        )) {
+
+            if (segment.isBlank()) {
+                continue;
+            }
+
+
+            int separatorIndex =
+                    segment.indexOf(
+                            JURISDICTION_PROVINCE_SEPARATOR
+                    );
+
+
+            String segmentProvince =
+                    separatorIndex >= 0
+                            ? segment.substring(
+                                    0,
+                                    separatorIndex
+                            )
+                            : segment;
+
+
+            String segmentDistricts =
+                    separatorIndex >= 0
+                            ? segment.substring(
+                                    separatorIndex + 1
+                            )
+                            : "";
+
+
+            /*
+             * 세그먼트의 시·도가 다르면 볼 필요가 없다.
+             */
+            if (province != null
+                    && !provinceMatches(
+                            segmentProvince,
+                            province
+                    )) {
+
+                continue;
+            }
+
+
+            /*
+             * 시·군·구 조건이 없으면
+             * 시·도만 맞아도 관할에 포함된다.
+             */
+            if (district == null) {
+                return true;
+            }
+
+
+            for (String segmentDistrict : segmentDistricts.split(
+                    JURISDICTION_DISTRICT_DELIMITER
+            )) {
+
+                if (districtMatches(
+                        segmentDistrict,
+                        district
+                )) {
+
+                    return true;
+                }
+            }
+        }
+
+
+        return false;
+    }
+
+
+    // ============================================================
+    // 시·도 비교
+    // ============================================================
+    //
+    // 프론트가 경기 / 경기도처럼
+    // 긴 이름과 짧은 이름을 섞어 보낼 수 있어
+    // 양방향 포함으로 비교한다.
+    //
+    // 시·도 17개는 서로 포함 관계가 없으므로
+    // 이 정도 느슨함이 오탐을 만들지 않는다.
+    //
+    // ============================================================
+
+    private boolean provinceMatches(
+
+            String stored,
+            String requested
+
+    ) {
+
+        String storedValue =
+                normalizeProvince(
+                        stored
+                );
+
+
+        String requestedValue =
+                normalizeProvince(
+                        requested
+                );
+
+
+        if (storedValue == null
+                || requestedValue == null) {
+
+            return false;
+        }
+
+
+        return storedValue.contains(requestedValue)
+                || requestedValue.contains(storedValue);
+    }
+
+
+    // ============================================================
+    // 시·군·구 비교
+    // ============================================================
+    //
+    // 서구가 강서구에 걸리는 것을 막기 위해
+    // 부분 문자열이 아니라 정확히 같은 이름만 통과시킨다.
+    //
+    // ============================================================
+
+    private boolean districtMatches(
+
+            String stored,
+            String requested
+
+    ) {
+
+        String storedValue =
+                normalizeDistrict(
+                        stored
+                );
+
+
+        String requestedValue =
+                normalizeDistrict(
+                        requested
+                );
+
+
+        if (storedValue == null
+                || requestedValue == null) {
+
+            return false;
+        }
+
+
+        return storedValue.equals(
+                requestedValue
+        );
     }
 
 
@@ -677,9 +810,15 @@ public class ShelterSearchService {
                 province.trim();
 
 
-        return value.isBlank()
-                ? null
-                : value;
+        if (value.isBlank()
+                || value.equals("전체")
+                || value.equalsIgnoreCase("all")) {
+
+            return null;
+        }
+
+
+        return value;
     }
 
 
@@ -687,7 +826,7 @@ public class ShelterSearchService {
     // 시·군·구 정규화
     // ============================================================
     //
-    // NAVER 응답 예:
+    // 프론트/관할 문자열 예:
     //
     // 고양시 덕양구
     // 수원시 영통구
@@ -719,7 +858,10 @@ public class ShelterSearchService {
                 district.trim();
 
 
-        if (value.isBlank()) {
+        if (value.isBlank()
+                || value.equals("전체")
+                || value.equalsIgnoreCase("all")) {
+
             return null;
         }
 
