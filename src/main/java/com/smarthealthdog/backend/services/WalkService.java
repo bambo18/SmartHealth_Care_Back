@@ -1,6 +1,7 @@
 package com.smarthealthdog.backend.services;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -388,7 +389,44 @@ public class WalkService {
 
 
         // --------------------------------------------------------
-        // 7. 좌표 JSON 직렬화
+        // 7. 활동 시간 검증
+        // --------------------------------------------------------
+        //
+        // 활동 시간은 일시정지(휴식)를 제외한 실제 산책 시간이다.
+        //
+        // 선택 필드이므로 null이면 검증을 건너뛰고 저장하지 않는다.
+        // 이 경우 산책 시간은 기존 방식(end_time - start_time)으로 계산된다.
+        //
+        // 값이 있으면
+        // - 0 이상
+        // - 전체 경과 시간 이하
+        //
+        // 여야 한다.
+        // --------------------------------------------------------
+
+        Long activeDurationSeconds =
+                req.activeDurationSeconds();
+
+        if (activeDurationSeconds != null) {
+
+            long elapsedSeconds =
+                    Duration.between(
+                            walk.getStartTime(),
+                            req.endTime()
+                    ).getSeconds();
+
+            if (activeDurationSeconds < 0
+                    || activeDurationSeconds > elapsedSeconds) {
+
+                throw new InvalidRequestDataException(
+                        ErrorCode.INVALID_WALK_ACTIVE_DURATION
+                );
+            }
+        }
+
+
+        // --------------------------------------------------------
+        // 8. 좌표 JSON 직렬화
         // --------------------------------------------------------
 
         String pathJson = "[]";
@@ -412,18 +450,19 @@ public class WalkService {
 
 
         // --------------------------------------------------------
-        // 8. 산책 종료
+        // 9. 산책 종료
         // --------------------------------------------------------
 
         walk.complete(
                 req.endTime(),
                 req.distanceKm(),
-                pathJson
+                pathJson,
+                activeDurationSeconds
         );
 
 
         // --------------------------------------------------------
-        // 9. 저장 후 반환
+        // 10. 저장 후 반환
         // --------------------------------------------------------
 
         return walkRepository.save(walk);

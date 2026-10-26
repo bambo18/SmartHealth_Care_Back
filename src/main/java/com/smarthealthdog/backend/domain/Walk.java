@@ -52,17 +52,33 @@ public class Walk {
     @Column(columnDefinition = "TEXT", name = "path_coordinates")
     private String pathCoordinates;
 
+    /*
+     * 일시정지를 제외한 실제 활동 시간(초)
+     *
+     * 앱이 계산한 값을 그대로 저장한다.
+     *
+     * null 허용:
+     * - 활동 시간을 전달하지 않은 종료 요청
+     * - 이 기능 도입 이전에 기록된 과거 산책
+     *
+     * 이 경우 산책 시간은 기존 방식(endTime - startTime)으로 계산된다.
+     */
+    @Column(name = "active_duration_seconds")
+    private Long activeDurationSeconds;
+
     @Builder
     private Walk(
             Pet pet,
             Instant startTime,
             Instant endTime,
             BigDecimal distanceKm,
-            String pathCoordinates
+            String pathCoordinates,
+            Long activeDurationSeconds
     ) {
         this.pet = pet;
         this.startTime = startTime;
         this.endTime = endTime;
+        this.activeDurationSeconds = activeDurationSeconds;
 
         this.distanceKm = distanceKm != null
                 ? distanceKm
@@ -76,9 +92,31 @@ public class Walk {
     /*
      * 산책 시간(초)
      *
+     * 활동 시간(activeDurationSeconds)이 저장되어 있으면 그 값을 우선 반환한다.
+     * 즉 일시정지(휴식) 시간은 제외된다.
+     *
+     * 활동 시간이 없으면 기존 방식대로 전체 경과 시간(endTime - startTime)을 반환한다.
+     *
      * 진행 중인 산책은 endTime이 없기 때문에 null 반환
      */
     public Long getDurationSeconds() {
+        if (activeDurationSeconds != null) {
+            return activeDurationSeconds;
+        }
+
+        if (startTime != null && endTime != null) {
+            return Duration.between(startTime, endTime).getSeconds();
+        }
+
+        return null;
+    }
+
+    /*
+     * 전체 경과 시간(초)
+     *
+     * 휴식 시간을 포함한 시작 ~ 종료 사이의 시간
+     */
+    public Long getElapsedSeconds() {
         if (startTime != null && endTime != null) {
             return Duration.between(startTime, endTime).getSeconds();
         }
@@ -112,6 +150,29 @@ public class Walk {
             BigDecimal distanceKm,
             String pathCoordinates
     ) {
+        complete(
+                endTime,
+                distanceKm,
+                pathCoordinates,
+                null
+        );
+    }
+
+    /*
+     * 산책 종료 처리 (활동 시간 포함)
+     *
+     * activeDurationSeconds:
+     * 앱이 계산한, 일시정지를 제외한 실제 활동 시간(초)
+     *
+     * null이면 기존 값을 유지하므로
+     * 활동 시간을 전달하지 않은 요청은 기존 계산 방식(경과 시간)을 그대로 사용한다.
+     */
+    public void complete(
+            Instant endTime,
+            BigDecimal distanceKm,
+            String pathCoordinates,
+            Long activeDurationSeconds
+    ) {
         if (endTime != null) {
             this.endTime = endTime;
         }
@@ -122,6 +183,10 @@ public class Walk {
 
         if (pathCoordinates != null) {
             this.pathCoordinates = pathCoordinates;
+        }
+
+        if (activeDurationSeconds != null) {
+            this.activeDurationSeconds = activeDurationSeconds;
         }
     }
 }

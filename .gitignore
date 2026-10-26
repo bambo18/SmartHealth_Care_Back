@@ -126,3 +126,21 @@ reports/
 **/.ipynb_checkpoints/
 .ipynb_checkpoints/
 
+
+# =========================
+# Local working docs / AI tooling output (추적 제외)
+# =========================
+# 로컬에서만 쓰는 작업 문서 — README.md / CONTRIBUTING.md 등 저장소 문서는 계속 추적한다
+CLAUDE.md
+FrontMessage.md
+Notion.md
+NotionDiffer.md
+NotionOCR.md
+PLAN.md
+SPEC.md
+PR_*.md
+
+# AI 툴 산출물 / 로컬 상태
+.bkit/
+.claude/
+.superpowers/
