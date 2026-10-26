@@ -99,6 +99,8 @@ public interface WalkRepository extends JpaRepository<Walk, Long> {
                         COALESCE(SUM(w.distance_km), 0) AS totalDistanceKm,
                         COALESCE(SUM(
                             CASE
+                                WHEN w.active_duration_seconds IS NOT NULL
+                                THEN w.active_duration_seconds
                                 WHEN w.end_time IS NOT NULL
                                 THEN EXTRACT(EPOCH FROM (w.end_time - w.start_time))
                                 ELSE 0

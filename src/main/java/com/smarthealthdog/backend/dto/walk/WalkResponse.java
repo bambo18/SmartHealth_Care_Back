@@ -18,6 +18,13 @@ public class WalkResponse {
      */
     public static Map<String, Object> toSnake(Walk w) {
 
+        /*
+         * duration은 활동 시간(일시정지 제외)을 우선 사용한다.
+         *
+         * 활동 시간이 저장되지 않은 산책(과거 기록 또는
+         * active_duration_seconds를 전달하지 않은 종료 요청)은
+         * getDurationSeconds()가 전체 경과 시간을 반환한다.
+         */
         Long duration = w.getDurationSeconds();
 
         if (duration == null
@@ -58,6 +65,9 @@ public class WalkResponse {
      */
     public static Map<String, Object> toDetailSnake(Walk w) {
 
+        /*
+         * toSnake와 동일하게 활동 시간(일시정지 제외)을 우선 사용
+         */
         Long duration = w.getDurationSeconds();
 
         if (duration == null
