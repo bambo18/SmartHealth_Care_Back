@@ -49,7 +49,6 @@ public class QuartzConfig {
         scheduler.setTransactionManager(transactionManager);
         scheduler.setJobFactory(jobFactory);
         scheduler.setTriggers(pushAIInferenceTaskTrigger, removeServiceErrorTasksTrigger, retryJobTrigger);
-        scheduler.setAutoStartup(false);
         scheduler.setQuartzProperties(properties);
 
         return scheduler;
