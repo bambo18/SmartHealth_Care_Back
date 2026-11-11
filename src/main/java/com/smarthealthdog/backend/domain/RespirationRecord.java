@@ -80,6 +80,34 @@ public class RespirationRecord {
         this.status = RespirationStatus.UPLOADING;
     }
 
+    // Called only after AI Worker completes a PROCESSING record.
+    public void markCompleted(BigDecimal rate) {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (rate == null || rate.signum() <= 0 || rate.scale() > 2 || rate.precision() - rate.scale() > 4) {
+            throw new IllegalArgumentException("Invalid respiratory rate");
+        }
+        this.respiratoryRate = rate;
+        this.failureReason = null;
+        this.completedAt = Instant.now();
+        this.status = RespirationStatus.COMPLETED;
+    }
+
+    // A failed inference does not produce a respiratory rate.
+    public void markInferenceFailed(String reason) {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (reason == null || reason.isBlank() || reason.length() > 256) {
+            throw new IllegalArgumentException("Invalid failure reason");
+        }
+        this.respiratoryRate = null;
+        this.failureReason = reason;
+        this.completedAt = Instant.now();
+        this.status = RespirationStatus.FAILED;
+    }
+
     public void markUploaded(long actualSizeBytes) {
         if (status != RespirationStatus.UPLOADING) {
             throw new IllegalStateException("Respiration video cannot be marked uploaded in state " + status);
