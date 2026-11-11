@@ -70,6 +70,15 @@ public class RespirationRecord {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "celery_task_id")
+    private UUID celeryTaskId;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "processing_started_at")
+    private Instant processingStartedAt;
+
     public RespirationRecord(UUID id, Pet pet, String storageKey,
                              long expectedSizeBytes, int durationSec) {
         this.id = id;
@@ -78,6 +87,19 @@ public class RespirationRecord {
         this.expectedSizeBytes = expectedSizeBytes;
         this.durationSec = durationSec;
         this.status = RespirationStatus.UPLOADING;
+    }
+
+    // Called by the dispatcher only after a successful Redis enqueue.
+    public void markProcessing(UUID taskId) {
+        if (status != RespirationStatus.PENDING || uploadedAt == null) {
+            throw new IllegalStateException("Respiration record is not ready for inference: " + status);
+        }
+        if (taskId == null) {
+            throw new IllegalArgumentException("Celery task ID is required");
+        }
+        this.celeryTaskId = taskId;
+        this.processingStartedAt = Instant.now();
+        this.status = RespirationStatus.PROCESSING;
     }
 
     // Called only after AI Worker completes a PROCESSING record.
