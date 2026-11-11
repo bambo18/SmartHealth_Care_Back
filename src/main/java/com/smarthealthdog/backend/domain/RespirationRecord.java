@@ -70,6 +70,15 @@ public class RespirationRecord {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "celery_task_id")
+    private UUID celeryTaskId;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "processing_started_at")
+    private Instant processingStartedAt;
+
     public RespirationRecord(UUID id, Pet pet, String storageKey,
                              long expectedSizeBytes, int durationSec) {
         this.id = id;
@@ -78,6 +87,47 @@ public class RespirationRecord {
         this.expectedSizeBytes = expectedSizeBytes;
         this.durationSec = durationSec;
         this.status = RespirationStatus.UPLOADING;
+    }
+
+    // Called by the dispatcher only after a successful Redis enqueue.
+    public void markProcessing(UUID taskId) {
+        if (status != RespirationStatus.PENDING || uploadedAt == null) {
+            throw new IllegalStateException("Respiration record is not ready for inference: " + status);
+        }
+        if (taskId == null) {
+            throw new IllegalArgumentException("Celery task ID is required");
+        }
+        this.celeryTaskId = taskId;
+        this.processingStartedAt = Instant.now();
+        this.status = RespirationStatus.PROCESSING;
+    }
+
+    // Called only after AI Worker completes a PROCESSING record.
+    public void markCompleted(BigDecimal rate) {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (rate == null || rate.signum() <= 0 || rate.scale() > 2 || rate.precision() - rate.scale() > 4) {
+            throw new IllegalArgumentException("Invalid respiratory rate");
+        }
+        this.respiratoryRate = rate;
+        this.failureReason = null;
+        this.completedAt = Instant.now();
+        this.status = RespirationStatus.COMPLETED;
+    }
+
+    // A failed inference does not produce a respiratory rate.
+    public void markInferenceFailed(String reason) {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (reason == null || reason.isBlank() || reason.length() > 256) {
+            throw new IllegalArgumentException("Invalid failure reason");
+        }
+        this.respiratoryRate = null;
+        this.failureReason = reason;
+        this.completedAt = Instant.now();
+        this.status = RespirationStatus.FAILED;
     }
 
     public void markUploaded(long actualSizeBytes) {
