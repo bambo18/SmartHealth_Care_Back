@@ -89,7 +89,7 @@ jwt:
 
   refresh-token:
     expiration:
-      days: 7
+      days: 30
     max-count: 10
 
 

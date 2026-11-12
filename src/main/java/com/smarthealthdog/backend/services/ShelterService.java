@@ -2,7 +2,11 @@ package com.smarthealthdog.backend.services;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +17,9 @@ import com.smarthealthdog.backend.dto.shelter.AdoptionStatus;
 import com.smarthealthdog.backend.dto.shelter.ShelterPetItem;
 import com.smarthealthdog.backend.dto.shelter.ShelterPetsResponse;
 import com.smarthealthdog.backend.dto.shelter.ShelterProfileResponse;
+import com.smarthealthdog.backend.dto.shelter.ShelterImportRequest.ShelterRecord;
+import com.smarthealthdog.backend.dto.shelter.ShelterImportResponse;
+import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.repositories.ShelterRepository;
 import com.smarthealthdog.backend.validation.ErrorCode;
@@ -25,6 +32,57 @@ import lombok.RequiredArgsConstructor;
 public class ShelterService {
 
     private final ShelterRepository shelterRepository;
+
+        /** 신규 보호소를 등록하고, 같은 이름의 기존 정보는 갱신합니다. */
+        @Transactional
+        public ShelterImportResponse importShelters(List<ShelterRecord> records) {
+                var names = records.stream().map(ShelterRecord::name).toList();
+                if (new HashSet<>(names).size() != names.size()) {
+                        throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+                }
+
+                for (ShelterRecord record : records) {
+                        if ((record.latitude() == null) != (record.longitude() == null)) {
+                                throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+                        }
+                }
+
+                Map<String, Shelter> existingByName = shelterRepository.findAllByNameIn(names)
+                                .stream()
+                                .collect(Collectors.toMap(Shelter::getName, Function.identity()));
+                int updated = 0;
+                List<Shelter> shelters = new ArrayList<>(records.size());
+
+                for (ShelterRecord record : records) {
+                        Shelter shelter = existingByName.get(record.name());
+                        if (shelter == null) {
+                                shelter = new Shelter();
+                        } else {
+                                updated++;
+                        }
+
+                        shelter.setName(record.name());
+                        shelter.setPhoneNumber(record.phoneNumber());
+                        shelter.setAddress(record.address());
+                        shelter.setIntroduction(record.introduction());
+                        shelter.setLatitude(record.latitude());
+                        shelter.setLongitude(record.longitude());
+                        shelter.setProvince(record.province());
+                        shelter.setDistrict(record.district());
+                        shelter.setFacilityType(record.facilityType());
+                        shelter.setJurisdiction(record.jurisdiction());
+                        shelter.setOutsideDistrict(record.outsideDistrict());
+                        if (record.active() != null) {
+                                shelter.setActive(record.active());
+                        }
+                        shelter.setSource(record.source());
+                        shelter.setSourceCheckedAt(record.sourceCheckedAt());
+                        shelters.add(shelter);
+                }
+
+                shelterRepository.saveAll(shelters);
+                return new ShelterImportResponse(records.size() - updated, updated, records.size());
+        }
 
     /** 보호소 기본 정보 조회 */
     public ShelterProfileResponse getProfile(Long shelterId) {

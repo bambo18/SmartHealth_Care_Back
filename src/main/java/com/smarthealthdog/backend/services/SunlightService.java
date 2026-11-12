@@ -250,10 +250,52 @@ public class SunlightService {
     // 오늘의 일광 노출 달성률
     // ============================================================
 
+    /**
+     * 오늘(Asia/Seoul 기준) 일광 노출 달성률을 조회합니다.
+     *
+     * @param petId 반려동물 ID
+     * @param userId 요청한 사용자 ID
+     * @return 오늘의 일광 노출 달성률
+     * @throws ResourceNotFoundException 반려동물이 없거나 요청자의 소유가 아닌 경우
+     */
     @Transactional(readOnly = true)
     public SunlightProgressResponse getTodayProgress(
             Long petId,
             Long userId
+    ) {
+
+        return getProgressByDate(
+                petId,
+                userId,
+                null
+        );
+    }
+
+
+    // ============================================================
+    // 특정 날짜의 일광 노출 달성률
+    // ============================================================
+
+    /**
+     * 특정 날짜(Asia/Seoul 기준)의 일광 노출 달성률을 조회합니다.
+     *
+     * 이미 지난 날짜는 그 날 24:00까지,
+     * 오늘은 현재 시각까지만 계산합니다.
+     *
+     * 미래 날짜이거나 해당 날짜에 조도 데이터가 없으면
+     * 오류가 아니라 달성률 0으로 응답합니다.
+     *
+     * @param petId 반려동물 ID
+     * @param userId 요청한 사용자 ID
+     * @param date 조회할 날짜. null이면 오늘
+     * @return 해당 날짜의 일광 노출 달성률
+     * @throws ResourceNotFoundException 반려동물이 없거나 요청자의 소유가 아닌 경우
+     */
+    @Transactional(readOnly = true)
+    public SunlightProgressResponse getProgressByDate(
+            Long petId,
+            Long userId,
+            LocalDate date
     ) {
 
         /*
@@ -272,10 +314,14 @@ public class SunlightService {
 
 
         /*
-         * 2. 한국 시간 기준 오늘
+         * 2. 조회 대상 날짜
+         *
+         * 파라미터가 없으면 한국 시간 기준 오늘
          */
-        LocalDate today =
-                LocalDate.now(SERVICE_ZONE);
+        LocalDate targetDate =
+                (date != null)
+                        ? date
+                        : LocalDate.now(SERVICE_ZONE);
 
 
         /*
@@ -283,23 +329,59 @@ public class SunlightService {
          * 일광 노출 계산에 포함했지만,
          *
          * 현재는 시간 제한을 제거하여
-         * 오늘 00:00부터 현재 시각까지
+         * 해당 날짜 00:00부터
          * 모든 산책 중 조도 데이터를 계산한다.
          */
         Instant dayStart =
-                today.atStartOfDay(SERVICE_ZONE)
+                targetDate.atStartOfDay(SERVICE_ZONE)
                         .toInstant();
 
 
         /*
-         * 현재 시각까지 계산
+         * 해당 날짜의 다음날 00:00
          */
-        Instant effectiveEnd =
+        Instant dayEnd =
+                targetDate.plusDays(1)
+                        .atStartOfDay(SERVICE_ZONE)
+                        .toInstant();
+
+
+        Instant now =
                 Instant.now();
 
 
         /*
-         * 3. 오늘 00:00 ~ 현재 시각까지
+         * 계산 종료 시각
+         *
+         * 이미 지난 날짜 → 그 날 24:00까지
+         * 오늘          → 현재 시각까지
+         *
+         * 아직 지나지 않은 10분 구간은
+         * 계산에 포함하지 않는다.
+         */
+        Instant effectiveEnd =
+                dayEnd.isBefore(now)
+                        ? dayEnd
+                        : now;
+
+
+        /*
+         * 미래 날짜는 계산할 구간이 아예 없으므로
+         * 조회하지 않고 0으로 응답한다.
+         */
+        if (!effectiveEnd.isAfter(dayStart)) {
+
+            return createProgressResponse(
+                    targetDate,
+                    0,
+                    0,
+                    0
+            );
+        }
+
+
+        /*
+         * 3. 해당 날짜 00:00 ~ 계산 종료 시각까지
          * 조도 데이터 조회
          */
         List<LightSensorSample> samples =
@@ -314,7 +396,7 @@ public class SunlightService {
         if (samples.isEmpty()) {
 
             return createProgressResponse(
-                    today,
+                    targetDate,
                     0,
                     0,
                     0
@@ -533,7 +615,7 @@ public class SunlightService {
 
 
         return createProgressResponse(
-                today,
+                targetDate,
                 achievedLuxMinutes,
                 qualifyingMinutes,
                 qualifiedWindows,

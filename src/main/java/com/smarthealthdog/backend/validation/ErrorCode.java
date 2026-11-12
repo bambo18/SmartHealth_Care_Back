@@ -29,6 +29,7 @@ public enum ErrorCode {
     INVALID_WALK_TIME_RANGE("산책의 종료 시간은 시작 시간 이후여야 합니다."),
     INVALID_WALK_DISTANCE("산책 거리는 0 이상이어야 합니다."),
     INVALID_WALK_PATH("산책 경로가 유효하지 않습니다."),
+    INVALID_WALK_ACTIVE_DURATION("활동 시간은 0 이상이며 전체 경과 시간을 초과할 수 없습니다."),
     WALK_NOT_FOUND("산책을 찾을 수 없습니다."),
     INVALID_TIMEZONE("유효하지 않은 타임존 문자열입니다."),
 

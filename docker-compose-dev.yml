@@ -12,6 +12,7 @@ services:
     environment:
       # Activate the 'dev' Spring profile
       SPRING_PROFILES_ACTIVE: dev
+      QUARTZ_LEGACY_CLEANUP_ENABLED: ${QUARTZ_LEGACY_CLEANUP_ENABLED:-false}
 
       # Configure Spring Boot to connect to the PostgreSQL service
       DB_HOST: postgres # Override for Docker internal network

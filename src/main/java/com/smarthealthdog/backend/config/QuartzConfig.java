@@ -57,6 +57,8 @@ public class QuartzConfig {
     @Bean
     public CronTrigger pushAIInferenceTaskTrigger(JobDetail aiInferenceJobDetail) {
         CronTriggerFactoryBean cronTriggerFactoryBean = new CronTriggerFactoryBean();
+        cronTriggerFactoryBean.setName("PushAIInferenceTasksTrigger");
+        cronTriggerFactoryBean.setGroup("DEFAULT");
         cronTriggerFactoryBean.setJobDetail(aiInferenceJobDetail);
         cronTriggerFactoryBean.setCronExpression("0/20 * * * * ?"); // For testing: run every 20 seconds
 
@@ -72,6 +74,8 @@ public class QuartzConfig {
     @Bean
     public CronTrigger removeServiceErrorTasksTrigger(JobDetail removeServiceErrorTasksJobDetail) {
         CronTriggerFactoryBean cronTriggerFactoryBean = new CronTriggerFactoryBean();
+        cronTriggerFactoryBean.setName("RemoveServiceErrorTasksTrigger");
+        cronTriggerFactoryBean.setGroup("DEFAULT");
         cronTriggerFactoryBean.setJobDetail(removeServiceErrorTasksJobDetail);
         
         // Delete every 10 minutes
@@ -87,6 +91,8 @@ public class QuartzConfig {
     @Bean
     public CronTrigger retryJobTrigger(JobDetail retryAIInferenceJobDetail) {
         CronTriggerFactoryBean cronTriggerFactoryBean = new CronTriggerFactoryBean();
+        cronTriggerFactoryBean.setName("RetryAIInferenceTasksTrigger");
+        cronTriggerFactoryBean.setGroup("DEFAULT");
         cronTriggerFactoryBean.setJobDetail(retryAIInferenceJobDetail);
         cronTriggerFactoryBean.setCronExpression("0 0/1 * * * ?"); // For testing: run every minute
 

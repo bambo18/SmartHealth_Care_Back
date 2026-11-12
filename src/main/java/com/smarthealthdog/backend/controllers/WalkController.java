@@ -1,6 +1,9 @@
 package com.smarthealthdog.backend.controllers;
 
-import java.time.OffsetDateTime;
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +26,9 @@ import com.smarthealthdog.backend.domain.Walk;
 import com.smarthealthdog.backend.dto.walk.CreateWalkRequest;
 import com.smarthealthdog.backend.dto.walk.EndWalkRequest;
 import com.smarthealthdog.backend.dto.walk.WalkResponse;
+import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.services.WalkService;
+import com.smarthealthdog.backend.validation.ErrorCode;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -150,15 +155,6 @@ public class WalkController {
     // 특정 반려동물 산책 목록 조회
     // ============================================================
 
-    /**
-     * TODO:
-     *
-     * 1. 타임존 처리
-     * 2. 날짜 파라미터 검증
-     * 3. 소유권 검증
-     * 4. 정렬 기준 처리
-     * 5. limit / offset 페이징
-     */
     @GetMapping
     @PreAuthorize("hasAuthority('can_view_own_walk_records')")
     public ResponseEntity<?> list(
@@ -196,52 +192,24 @@ public class WalkController {
             Integer offset
     ) {
 
-        OffsetDateTime start = null;
-        OffsetDateTime end = null;
+        ZoneId zone = parseZone(timezone);
+        LocalDate startDate = parseDate(start_date);
+        LocalDate endDate = parseDate(end_date);
 
-
-        // --------------------------------------------------------
-        // 날짜 파싱
-        // --------------------------------------------------------
-
-        try {
-
-            if (start_date != null
-                    && !start_date.isBlank()) {
-
-                start =
-                        OffsetDateTime.parse(
-                                start_date
-                                        + "T00:00:00Z"
-                        );
-            }
-
-
-            if (end_date != null
-                    && !end_date.isBlank()) {
-
-                end =
-                        OffsetDateTime.parse(
-                                end_date
-                                        + "T23:59:59Z"
-                        );
-            }
-
-        } catch (Exception e) {
-
-            return ResponseEntity
-                    .badRequest()
-                    .body(
-                            Map.of(
-                                    "status",
-                                    400,
-
-                                    "message",
-                                    "유효하지 않은 쿼리 파라미터입니다. 날짜 형식을 확인하세요."
-                            )
-                    );
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_DATE_RANGE);
         }
 
+        if (limit == null || limit <= 0 || limit > 50 || offset == null || offset < 0) {
+            throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+        }
+
+        Instant start = startDate == null
+                ? null
+                : startDate.atStartOfDay(zone).toInstant();
+        Instant endExclusive = endDate == null
+                ? null
+                : endDate.plusDays(1).atStartOfDay(zone).toInstant();
 
         // --------------------------------------------------------
         // 산책 목록
@@ -252,45 +220,16 @@ public class WalkController {
                         userDetails.getUsername()
                 );
 
-        List<Walk> all =
+        var walkPage =
                 walkService.listByPet(
                         petId,
                         userId,
                         start,
-                        end,
-                        sort_by
-                );
-
-
-        // --------------------------------------------------------
-        // limit / offset
-        // --------------------------------------------------------
-
-        int from =
-                Math.max(
-                        0,
+                        endExclusive,
+                        sort_by,
+                        limit,
                         offset
                 );
-
-
-        int to =
-                Math.min(
-                        all.size(),
-                        from
-                                + Math.max(
-                                        0,
-                                        limit
-                                )
-                );
-
-
-        List<Walk> pageSlice =
-                (from < to)
-                        ? all.subList(
-                                from,
-                                to
-                        )
-                        : List.of();
 
 
         // --------------------------------------------------------
@@ -298,7 +237,7 @@ public class WalkController {
         // --------------------------------------------------------
 
         var items =
-                pageSlice.stream()
+                walkPage.getContent().stream()
                         .map(
                                 walk -> {
 
@@ -343,30 +282,30 @@ public class WalkController {
         // 페이지 정보
         // --------------------------------------------------------
 
-        Map<String, Object> page =
+        Map<String, Object> pageInfo =
                 new LinkedHashMap<>();
 
-        page.put(
+        pageInfo.put(
                 "limit",
                 limit
         );
 
-        page.put(
+        pageInfo.put(
                 "offset",
                 offset
         );
 
-        page.put(
+        pageInfo.put(
                 "sort_by",
                 sort_by
         );
 
-        page.put(
+        pageInfo.put(
                 "start_date",
                 start_date
         );
 
-        page.put(
+        pageInfo.put(
                 "end_date",
                 end_date
         );
@@ -386,7 +325,7 @@ public class WalkController {
 
         body.put(
                 "total",
-                all.size()
+                walkPage.getTotalElements()
         );
 
         body.put(
@@ -396,10 +335,34 @@ public class WalkController {
 
         body.put(
                 "page",
-                page
+                pageInfo
         );
 
 
         return ResponseEntity.ok(body);
     }
+
+        private ZoneId parseZone(String timezone) {
+                if (timezone == null || timezone.isBlank()) {
+                        return ZoneId.of("UTC");
+                }
+
+                try {
+                        return ZoneId.of(timezone);
+                } catch (DateTimeException e) {
+                        throw new InvalidRequestDataException(ErrorCode.INVALID_TIMEZONE);
+                }
+        }
+
+        private LocalDate parseDate(String date) {
+                if (date == null || date.isBlank()) {
+                        return null;
+                }
+
+                try {
+                        return LocalDate.parse(date);
+                } catch (DateTimeException e) {
+                        throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+                }
+        }
 }

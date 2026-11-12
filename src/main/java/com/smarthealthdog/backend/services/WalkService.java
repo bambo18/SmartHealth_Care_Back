@@ -1,15 +1,17 @@
 package com.smarthealthdog.backend.services;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +57,7 @@ public class WalkService {
 
         // 2. 해당 사용자의 반려동물인지 확인
         if (!pet.getOwner().getId().equals(userId)) {
+
             /*
              * 다른 사용자의 반려동물 존재 여부를 노출하지 않기 위해
              * 기존 프로젝트 방식과 동일하게 404 처리
@@ -92,14 +95,18 @@ public class WalkService {
     // ============================================================
 
     @Transactional(readOnly = true)
-    public Walk get(Long walkId, Long userId) {
+    public Walk get(
+            Long walkId,
+            Long userId
+    ) {
 
-        Walk walk = walkRepository.findById(walkId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                ErrorCode.WALK_NOT_FOUND
-                        )
-                );
+        Walk walk =
+                walkRepository.findById(walkId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        ErrorCode.WALK_NOT_FOUND
+                                )
+                        );
 
         // 소유권 검증
         if (!walk.getPet()
@@ -121,69 +128,131 @@ public class WalkService {
     // ============================================================
 
     @Transactional(readOnly = true)
-    public List<Walk> listByPet(
+    public Page<Walk> listByPet(
             Long petId,
-                        Long userId,
-            OffsetDateTime start,
-            OffsetDateTime end,
-            String sortBy
+            Long userId,
+            Instant startInclusive,
+            Instant endExclusive,
+            String sortBy,
+            Integer limit,
+            Integer offset
     ) {
 
-                Pet pet = petService.get(petId);
+        // --------------------------------------------------------
+        // 1. 반려동물 조회
+        // --------------------------------------------------------
 
-                if (!pet.getOwner().getId().equals(userId)) {
-                        throw new ResourceNotFoundException(
-                                        ErrorCode.RESOURCE_NOT_FOUND
-                        );
-                }
+        Pet pet =
+                petService.get(petId);
 
-        String sort =
-                (sortBy == null || sortBy.isBlank())
-                        ? "date_desc"
-                        : sortBy;
 
-        if (start == null && end == null) {
+        // --------------------------------------------------------
+        // 2. 소유권 검증
+        // --------------------------------------------------------
 
-            return switch (sort) {
+        if (!pet.getOwner()
+                .getId()
+                .equals(userId)) {
 
-                case "date_asc" ->
-                        walkRepository
-                                .findByPetIdOrderByStartTimeAsc(petId);
-
-                default ->
-                        walkRepository
-                                .findByPetIdOrderByStartTimeDesc(petId);
-            };
+            throw new ResourceNotFoundException(
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
         }
 
-        OffsetDateTime startSafe =
-                (start != null)
-                        ? start
-                        : OffsetDateTime.MIN;
 
-        OffsetDateTime endSafe =
-                (end != null)
-                        ? end
-                        : OffsetDateTime.MAX;
+        // --------------------------------------------------------
+        // 3. 페이징 값 검증
+        // --------------------------------------------------------
 
-        return switch (sort) {
+        if (limit == null
+                || limit <= 0
+                || limit > 50
+                || offset == null
+                || offset < 0) {
 
-            case "date_asc" ->
-                    walkRepository
-                            .findByPetIdAndStartTimeBetweenOrderByStartTimeAsc(
-                                    petId,
-                                    startSafe,
-                                    endSafe
-                            );
+            throw new InvalidRequestDataException(
+                    ErrorCode.INVALID_INPUT
+            );
+        }
 
-            default ->
-                    walkRepository
-                            .findByPetIdAndStartTimeBetweenOrderByStartTimeDesc(
-                                    petId,
-                                    startSafe,
-                                    endSafe
-                            );
-        };
+
+        // --------------------------------------------------------
+        // 4. 정렬
+        // --------------------------------------------------------
+
+        Sort.Direction direction =
+                "date_asc".equals(sortBy)
+                        ? Sort.Direction.ASC
+                        : Sort.Direction.DESC;
+
+
+        Pageable pageable =
+                new OffsetBasedPageable(
+                        offset,
+                        limit,
+                        Sort.by(
+                                direction,
+                                "startTime"
+                        )
+                );
+
+
+        // --------------------------------------------------------
+        // 5. 날짜 조건 없음
+        // --------------------------------------------------------
+
+        if (startInclusive == null
+                && endExclusive == null) {
+
+            return walkRepository.findByPetId(
+                    petId,
+                    pageable
+            );
+        }
+
+
+        // --------------------------------------------------------
+        // 6. 시작 날짜만 있음
+        // --------------------------------------------------------
+
+        if (startInclusive != null
+                && endExclusive == null) {
+
+            return walkRepository
+                    .findByPetIdAndStartTimeGreaterThanEqual(
+                            petId,
+                            startInclusive,
+                            pageable
+                    );
+        }
+
+
+        // --------------------------------------------------------
+        // 7. 종료 날짜만 있음
+        // --------------------------------------------------------
+
+        if (startInclusive == null) {
+
+            return walkRepository
+                    .findByPetIdAndStartTimeLessThan(
+                            petId,
+                            endExclusive,
+                            pageable
+                    );
+        }
+
+
+        // --------------------------------------------------------
+        // 8. 시작 날짜 + 종료 날짜 모두 있음
+        // --------------------------------------------------------
+
+        return walkRepository
+                .findByPetIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(
+                        petId,
+                        startInclusive,
+                        endExclusive,
+                        pageable
+                );
     }
 
 
@@ -197,12 +266,13 @@ public class WalkService {
             Long userId
     ) {
 
-        Walk walk = walkRepository.findById(walkId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                ErrorCode.WALK_NOT_FOUND
-                        )
-                );
+        Walk walk =
+                walkRepository.findById(walkId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        ErrorCode.WALK_NOT_FOUND
+                                )
+                        );
 
         // 소유권 검증
         if (!walk.getPet()
@@ -235,12 +305,13 @@ public class WalkService {
         // 1. 산책 조회
         // --------------------------------------------------------
 
-        Walk walk = walkRepository.findById(walkId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                ErrorCode.WALK_NOT_FOUND
-                        )
-                );
+        Walk walk =
+                walkRepository.findById(walkId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        ErrorCode.WALK_NOT_FOUND
+                                )
+                        );
 
 
         // --------------------------------------------------------
@@ -291,7 +362,10 @@ public class WalkService {
         // 5. 종료 시간 검증
         // --------------------------------------------------------
 
-        if (req.endTime().isBefore(walk.getStartTime())) {
+        if (req.endTime()
+                .isBefore(
+                        walk.getStartTime()
+                )) {
 
             throw new InvalidRequestDataException(
                     ErrorCode.INVALID_WALK_TIME_RANGE
@@ -304,7 +378,9 @@ public class WalkService {
         // --------------------------------------------------------
 
         if (req.distanceKm()
-                .compareTo(BigDecimal.ZERO) < 0) {
+                .compareTo(
+                        BigDecimal.ZERO
+                ) < 0) {
 
             throw new InvalidRequestDataException(
                     ErrorCode.INVALID_WALK_DISTANCE
@@ -313,7 +389,44 @@ public class WalkService {
 
 
         // --------------------------------------------------------
-        // 7. 좌표 JSON 직렬화
+        // 7. 활동 시간 검증
+        // --------------------------------------------------------
+        //
+        // 활동 시간은 일시정지(휴식)를 제외한 실제 산책 시간이다.
+        //
+        // 선택 필드이므로 null이면 검증을 건너뛰고 저장하지 않는다.
+        // 이 경우 산책 시간은 기존 방식(end_time - start_time)으로 계산된다.
+        //
+        // 값이 있으면
+        // - 0 이상
+        // - 전체 경과 시간 이하
+        //
+        // 여야 한다.
+        // --------------------------------------------------------
+
+        Long activeDurationSeconds =
+                req.activeDurationSeconds();
+
+        if (activeDurationSeconds != null) {
+
+            long elapsedSeconds =
+                    Duration.between(
+                            walk.getStartTime(),
+                            req.endTime()
+                    ).getSeconds();
+
+            if (activeDurationSeconds < 0
+                    || activeDurationSeconds > elapsedSeconds) {
+
+                throw new InvalidRequestDataException(
+                        ErrorCode.INVALID_WALK_ACTIVE_DURATION
+                );
+            }
+        }
+
+
+        // --------------------------------------------------------
+        // 8. 좌표 JSON 직렬화
         // --------------------------------------------------------
 
         String pathJson = "[]";
@@ -322,9 +435,10 @@ public class WalkService {
 
             if (req.pathCoordinates() != null) {
 
-                pathJson = objectMapper.writeValueAsString(
-                        req.pathCoordinates()
-                );
+                pathJson =
+                        objectMapper.writeValueAsString(
+                                req.pathCoordinates()
+                        );
             }
 
         } catch (JsonProcessingException e) {
@@ -336,18 +450,19 @@ public class WalkService {
 
 
         // --------------------------------------------------------
-        // 8. 산책 종료
+        // 9. 산책 종료
         // --------------------------------------------------------
 
         walk.complete(
                 req.endTime(),
                 req.distanceKm(),
-                pathJson
+                pathJson,
+                activeDurationSeconds
         );
 
 
         // --------------------------------------------------------
-        // 9. 저장 후 반환
+        // 10. 저장 후 반환
         // --------------------------------------------------------
 
         return walkRepository.save(walk);
@@ -364,13 +479,16 @@ public class WalkService {
             String timezone
     ) {
 
-        ZoneId zone = ZoneId.of("UTC");
+        ZoneId zone =
+                ZoneId.of("UTC");
 
-        if (timezone != null && !timezone.isBlank()) {
+        if (timezone != null
+                && !timezone.isBlank()) {
 
             try {
 
-                zone = ZoneId.of(timezone);
+                zone =
+                        ZoneId.of(timezone);
 
             } catch (Exception e) {
 
@@ -383,7 +501,9 @@ public class WalkService {
 
         // 현재 주의 일요일 00:00:00
         Instant curStart =
-                dateUtils.getStartOfWeekSundayInstant(zone);
+                dateUtils.getStartOfWeekSundayInstant(
+                        zone
+                );
 
         Instant curEnd =
                 curStart.plusSeconds(
@@ -405,7 +525,9 @@ public class WalkService {
 
         // 사용자 반려동물 목록
         List<Pet> pets =
-                petService.listByOwner(userId);
+                petService.listByOwner(
+                        userId
+                );
 
 
         Map<Long, String> petNameMap =
@@ -458,7 +580,8 @@ public class WalkService {
 
         for (Pet pet : pets) {
 
-            long petId = pet.getId();
+            long petId =
+                    pet.getId();
 
 
             var current =
@@ -476,23 +599,35 @@ public class WalkService {
 
 
             long currentWalks =
-                    nvl(current.getTotalWalks());
+                    nvl(
+                            current.getTotalWalks()
+                    );
 
             double currentDistance =
-                    nvl(current.getTotalDistanceKm());
+                    nvl(
+                            current.getTotalDistanceKm()
+                    );
 
             long currentDuration =
-                    nvl(current.getTotalDurationSec());
+                    nvl(
+                            current.getTotalDurationSec()
+                    );
 
 
             long previousWalks =
-                    nvl(previous.getTotalWalks());
+                    nvl(
+                            previous.getTotalWalks()
+                    );
 
             double previousDistance =
-                    nvl(previous.getTotalDistanceKm());
+                    nvl(
+                            previous.getTotalDistanceKm()
+                    );
 
             long previousDuration =
-                    nvl(previous.getTotalDurationSec());
+                    nvl(
+                            previous.getTotalDurationSec()
+                    );
 
 
             Double walksPct =
@@ -582,7 +717,9 @@ public class WalkService {
                     );
 
 
-            petItems.add(item);
+            petItems.add(
+                    item
+            );
         }
 
 
@@ -654,7 +791,9 @@ public class WalkService {
 
 
         Instant startOfWeek =
-                dateUtils.getStartOfWeekInstant(zone);
+                dateUtils.getStartOfWeekInstant(
+                        zone
+                );
 
 
         Instant endOfWeek =
@@ -662,12 +801,14 @@ public class WalkService {
                         .plusSeconds(
                                 7 * 24 * 3600
                         )
-                        .minusSeconds(1);
+                        .minusNanos(1);
 
 
         // 사용자 소유 반려동물
         List<Pet> pets =
-                petService.listByOwner(userId);
+                petService.listByOwner(
+                        userId
+                );
 
 
         List<Walk> walks =
@@ -683,13 +824,9 @@ public class WalkService {
 
                                     pet.getId(),
 
-                                    startOfWeek.atOffset(
-                                            ZoneOffset.UTC
-                                    ),
+                                    startOfWeek,
 
-                                    endOfWeek.atOffset(
-                                            ZoneOffset.UTC
-                                    )
+                                    endOfWeek
                             )
             );
         }
@@ -709,18 +846,22 @@ public class WalkService {
 
         return new WalkRepository.WeeklyAggRow() {
 
+            @Override
             public Long getPetId() {
                 return petId;
             }
 
+            @Override
             public Long getTotalWalks() {
                 return 0L;
             }
 
+            @Override
             public Double getTotalDistanceKm() {
                 return 0.0;
             }
 
+            @Override
             public Long getTotalDurationSec() {
                 return 0L;
             }
@@ -728,7 +869,9 @@ public class WalkService {
     }
 
 
-    private static long nvl(Long value) {
+    private static long nvl(
+            Long value
+    ) {
 
         return value == null
                 ? 0L
@@ -736,7 +879,9 @@ public class WalkService {
     }
 
 
-    private static double nvl(Double value) {
+    private static double nvl(
+            Double value
+    ) {
 
         return value == null
                 ? 0.0
@@ -771,5 +916,121 @@ public class WalkService {
         return Math.round(
                 value * 10.0
         ) / 10.0;
+    }
+
+
+    // ============================================================
+    // Offset 기반 Pageable
+    // ============================================================
+
+    private static final class OffsetBasedPageable
+            implements Pageable {
+
+        private final int offset;
+        private final int pageSize;
+        private final Sort sort;
+
+
+        private OffsetBasedPageable(
+                int offset,
+                int pageSize,
+                Sort sort
+        ) {
+
+            this.offset = offset;
+            this.pageSize = pageSize;
+            this.sort = sort;
+        }
+
+
+        @Override
+        public int getPageNumber() {
+
+            return offset
+                    / pageSize;
+        }
+
+
+        @Override
+        public int getPageSize() {
+
+            return pageSize;
+        }
+
+
+        @Override
+        public long getOffset() {
+
+            return offset;
+        }
+
+
+        @Override
+        public Sort getSort() {
+
+            return sort;
+        }
+
+
+        @Override
+        public Pageable next() {
+
+            return new OffsetBasedPageable(
+                    offset + pageSize,
+                    pageSize,
+                    sort
+            );
+        }
+
+
+        @Override
+        public Pageable previousOrFirst() {
+
+            return hasPrevious()
+                    ? new OffsetBasedPageable(
+                            offset - pageSize,
+                            pageSize,
+                            sort
+                    )
+                    : first();
+        }
+
+
+        @Override
+        public Pageable first() {
+
+            return new OffsetBasedPageable(
+                    0,
+                    pageSize,
+                    sort
+            );
+        }
+
+
+        @Override
+        public Pageable withPage(
+                int pageNumber
+        ) {
+
+            if (pageNumber < 0) {
+
+                throw new IllegalArgumentException(
+                        "Page index must not be less than zero"
+                );
+            }
+
+            return new OffsetBasedPageable(
+                    pageNumber * pageSize,
+                    pageSize,
+                    sort
+            );
+        }
+
+
+        @Override
+        public boolean hasPrevious() {
+
+            return offset > 0;
+        }
     }
 }
