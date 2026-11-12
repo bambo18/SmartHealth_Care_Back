@@ -155,6 +155,29 @@ export INFERENCE_SERVICE_INTERVAL_SECONDS=[AI 서비스 요청 간격 (초)]
 [System.Environment]::SetEnvironmentVariable('INFERENCE_SERVICE_INTERVAL_SECONDS', '[AI 서비스 요청 간격 (초)]', 'User')
 ```
 
+## 건강검진표 OCR 설정
+반려동물 진단서 사진을 OCR로 읽어 건강검진 기록으로 등록하는 기능(`HEALTH-01`)에 필요한 설정입니다.
+
+Google Cloud Vision API를 사용합니다. GCP 콘솔에서 **Cloud Vision API를 활성화**한 뒤 API 키를 발급받고, 반드시 **"API 제한"에서 Cloud Vision API만 허용**하도록 제한하세요. 제한하지 않은 키가 유출되면 GCP 프로젝트의 다른 API까지 호출될 수 있습니다.
+
+`UPLOAD_IMAGE_MAX_SIZE_BYTES`는 `application-{dev,prod}.yml`의 `spring.servlet.multipart.max-file-size`와 **반드시 같은 값**이어야 합니다. 두 값이 다르면 컨테이너를 통과한 파일이 애플리케이션에서 거부되거나 그 반대가 됩니다. 기본값은 7MB(7340032 바이트)이며, 진단서의 작은 인쇄 글자를 읽어야 해 그보다 낮추면 인식 실패율이 올라갑니다.
+
+#### MacOS / Linux
+```bash
+export GOOGLE_VISION_API_KEY=[Cloud Vision API 키] # GCP 콘솔에서 발급. API 제한으로 Cloud Vision API만 허용할 것
+export UPLOAD_IMAGE_MAX_SIZE_BYTES=7340032 # 이미지 업로드 상한 (바이트). yml의 max-file-size와 같은 값이어야 함
+export OCR_USER_INTERVAL_SECONDS=30 # 사용자별 OCR 요청 최소 간격 (초). 유료 외부 호출 비용을 막는 값
+export HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS=300 # 진단서 원본 이미지 서명 URL 만료 시간 (초)
+```
+
+#### Windows (PowerShell)
+```powershell
+[System.Environment]::SetEnvironmentVariable('GOOGLE_VISION_API_KEY', '[Cloud Vision API 키]', 'User') # GCP 콘솔에서 발급. API 제한으로 Cloud Vision API만 허용할 것
+[System.Environment]::SetEnvironmentVariable('UPLOAD_IMAGE_MAX_SIZE_BYTES', '7340032', 'User') # 이미지 업로드 상한 (바이트). yml의 max-file-size와 같은 값이어야 함
+[System.Environment]::SetEnvironmentVariable('OCR_USER_INTERVAL_SECONDS', '30', 'User') # 사용자별 OCR 요청 최소 간격 (초). 유료 외부 호출 비용을 막는 값
+[System.Environment]::SetEnvironmentVariable('HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS', '300', 'User') # 진단서 원본 이미지 서명 URL 만료 시간 (초)
+```
+
 ## 빌드 및 서버 실행
 
 프로젝트에서 사용하는 자바 버전은 24입니다. 자바 24가 설치되어 있는지 확인하세요. 설치되어 있지 않다면, [링크](https://www.oracle.com/java/technologies/javase/jdk24-archive-downloads.html)에서 설치할 수 있습니다. 본인의 OS에 맞는 버전을 다운로드하여 설치합니다.

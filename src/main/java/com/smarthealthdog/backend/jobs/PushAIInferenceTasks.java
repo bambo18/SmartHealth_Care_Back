@@ -1,5 +1,6 @@
 package com.smarthealthdog.backend.jobs;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -56,7 +57,8 @@ public class PushAIInferenceTasks implements Job {
 
         diagnosisTaskRequestClient.sendDiagnosisTaskInBatch(requestDataList);
 
-        // Update statuses to PROCESSING
-        submissionRepository.updateStatusByIds(SubmissionStatus.PROCESSING, submissionIds);
+        // PROCESSING 으로 전환하면서 진입 시각을 함께 남긴다.
+        // 재적재마다 갱신되어야 재시도 타임아웃이 시도별로 새로 계산된다.
+        submissionRepository.markProcessingByIds(Instant.now(), submissionIds);
     }
 }

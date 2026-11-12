@@ -39,7 +39,10 @@ public class RetryAIInferenceTasks implements Job {
     public void execute(JobExecutionContext context) {
         Integer page = 0;
         while (true) {
-            Page<Submission> submissions = submissionRepository.findByStatusAndSubmittedAtLessThanEqualOrderBySubmittedAtAsc(
+            // 기준은 제출 시각이 아니라 PROCESSING 진입 시각이다.
+            // 제출 시각은 재시도해도 바뀌지 않아, 한 번 기준선을 넘으면 조건이
+            // 영구히 참이 되어 시도마다 잡 주기만큼만 주어진다.
+            Page<Submission> submissions = submissionRepository.findByStatusAndProcessingStartedAtLessThanEqualOrderByProcessingStartedAtAsc(
                 SubmissionStatus.PROCESSING,
                 Instant.now().minusSeconds(inferenceServiceTimeoutSeconds),
                 PageRequest.of(page, 100)

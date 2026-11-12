@@ -26,6 +26,9 @@ public class ProdImgUtils implements ImgUtils {
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
 
+    /** TTL 을 지정하지 않는 기존 호출부가 쓰던 기본 유효 기간. */
+    private static final Duration DEFAULT_TTL = Duration.ofHours(1);
+
     /**
      * CloudFront URL이 있으면 CloudFront URL을 반환하고,
      * CloudFront URL이 없으면 S3 presigned URL을 반환한다.
@@ -43,7 +46,7 @@ public class ProdImgUtils implements ImgUtils {
             return buildCloudFrontUrl(key);
         }
 
-        return createPresignedUrl(key);
+        return createPresignedUrl(key, DEFAULT_TTL);
     }
 
     /**
@@ -51,7 +54,18 @@ public class ProdImgUtils implements ImgUtils {
      */
     @Override
     public String getImgUrlForAIWorker(String key) {
-        return createPresignedUrl(key);
+        return getSecureImgUrl(key, DEFAULT_TTL);
+    }
+
+    /**
+     * 지정한 기간 동안만 유효한 presigned URL을 반환한다.
+     *
+     * CloudFront 분기를 타지 않는다 — 진단서처럼 개인정보가 찍힌 이미지가
+     * 무서명·무만료 URL로 공개되면 안 되기 때문이다.
+     */
+    @Override
+    public String getSecureImgUrl(String key, Duration ttl) {
+        return createPresignedUrl(key, ttl);
     }
 
     /**
@@ -75,9 +89,9 @@ public class ProdImgUtils implements ImgUtils {
     }
 
     /**
-     * S3 key를 1시간 동안 접근 가능한 presigned URL로 변환한다.
+     * S3 key를 지정한 기간 동안 접근 가능한 presigned URL로 변환한다.
      */
-    private String createPresignedUrl(String key) {
+    private String createPresignedUrl(String key, Duration ttl) {
         if (key == null || key.isBlank()) {
             return null;
         }
@@ -88,7 +102,7 @@ public class ProdImgUtils implements ImgUtils {
                 .build();
 
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofHours(1))
+                .signatureDuration(ttl)
                 .getObjectRequest(getObjectRequest)
                 .build();
 

@@ -2,6 +2,13 @@ spring:
   application:
     name: backend
 
+  servlet:
+    multipart:
+      # 폰으로 찍은 진단서 사진은 대부분 1MB(Spring 기본값)를 넘는다.
+      # 이 설정이 없으면 컨테이너가 먼저 MaxUploadSizeExceededException 으로 막는다.
+      max-file-size: 7MB
+      max-request-size: 9MB
+
   data:
     redis:
       host: ${REDIS_HOST}
@@ -202,3 +209,35 @@ naver:
   maps:
     client-id: ${NAVER_MAPS_CLIENT_ID}
     client-secret: ${NAVER_MAPS_CLIENT_SECRET}
+
+
+upload:
+  image:
+    # spring.servlet.multipart.max-file-size 와 반드시 같은 값이어야 한다.
+    # 상한의 단일 출처는 이 설정이며, FileUploadService 가 주입받아 사용한다.
+    max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032}   # 7MB
+
+
+# 건강검진표(진단서) OCR 설정
+ocr:
+  google:
+    # GCP 콘솔에서 Cloud Vision API를 활성화한 뒤 발급한 API 키.
+    # 반드시 "API 제한"에서 Cloud Vision API만 허용하도록 제한한다.
+    api-key: ${GOOGLE_VISION_API_KEY}
+    endpoint: https://vision.googleapis.com/v1/images:annotate
+    # 한국어 진단서이므로 languageHints로 ko를 명시한다.
+    language-hint: ko
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+
+  certificate:
+    min-confidence: 0.75
+
+  # 사용자 단위 최소 요청 간격(초). 유료 OCR 호출에만 적용된다.
+  user-interval:
+    seconds: ${OCR_USER_INTERVAL_SECONDS:30}
+
+
+health-certificate:
+  image:
+    presigned-url-expiration-seconds: ${HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS:300}
