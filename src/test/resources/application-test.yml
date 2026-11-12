@@ -121,13 +121,8 @@ upload:
     max-size-bytes: ${UPLOAD_IMAGE_MAX_SIZE_BYTES:7340032}
 
 ocr:
-  google:
-    api-key: ${GOOGLE_VISION_API_KEY:test-api-key}
-    # 테스트가 실수로 과금되는 실제 Vision 호출을 하지 않도록 로컬 주소를 기본값으로 둔다.
-    endpoint: ${GOOGLE_VISION_ENDPOINT:http://localhost:9999/v1/images:annotate}
-    language-hint: ko
-    connect-timeout-seconds: 10
-    read-timeout-seconds: 15
+  # 백엔드가 Vision 을 직접 부르지 않으므로 벤더 설정이 없다. 과금되는 호출이
+  # 테스트에서 일어날 경로 자체가 사라졌다.
   certificate:
     min-confidence: 0.75
   user-interval:

@@ -164,7 +164,6 @@ Google Cloud Vision API를 사용합니다. GCP 콘솔에서 **Cloud Vision API�
 
 #### MacOS / Linux
 ```bash
-export GOOGLE_VISION_API_KEY=[Cloud Vision API 키] # GCP 콘솔에서 발급. API 제한으로 Cloud Vision API만 허용할 것
 export UPLOAD_IMAGE_MAX_SIZE_BYTES=7340032 # 이미지 업로드 상한 (바이트). yml의 max-file-size와 같은 값이어야 함
 export OCR_USER_INTERVAL_SECONDS=30 # 사용자별 OCR 요청 최소 간격 (초). 유료 외부 호출 비용을 막는 값
 export HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS=300 # 진단서 원본 이미지 서명 URL 만료 시간 (초)
@@ -172,7 +171,6 @@ export HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS=300 # 진단서 원본 �
 
 #### Windows (PowerShell)
 ```powershell
-[System.Environment]::SetEnvironmentVariable('GOOGLE_VISION_API_KEY', '[Cloud Vision API 키]', 'User') # GCP 콘솔에서 발급. API 제한으로 Cloud Vision API만 허용할 것
 [System.Environment]::SetEnvironmentVariable('UPLOAD_IMAGE_MAX_SIZE_BYTES', '7340032', 'User') # 이미지 업로드 상한 (바이트). yml의 max-file-size와 같은 값이어야 함
 [System.Environment]::SetEnvironmentVariable('OCR_USER_INTERVAL_SECONDS', '30', 'User') # 사용자별 OCR 요청 최소 간격 (초). 유료 외부 호출 비용을 막는 값
 [System.Environment]::SetEnvironmentVariable('HEALTH_CERTIFICATE_IMAGE_URL_EXPIRATION_SECONDS', '300', 'User') # 진단서 원본 이미지 서명 URL 만료 시간 (초)

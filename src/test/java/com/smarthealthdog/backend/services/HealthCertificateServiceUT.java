@@ -13,9 +13,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -31,16 +29,13 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.smarthealthdog.backend.clients.ocr.HealthCertificateFieldExtractor;
-import com.smarthealthdog.backend.clients.ocr.HealthCertificateOcrClient;
 import com.smarthealthdog.backend.domain.Pet;
-import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
 import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.domain.User;
 import com.smarthealthdog.backend.dto.diagnosis.create.SubmissionImageUploadEvent;
 import com.smarthealthdog.backend.dto.health.CertificateSubmissionAccepted;
-import com.smarthealthdog.backend.dto.health.ocr.HealthCertificateOcrResult;
 import com.smarthealthdog.backend.exceptions.InternalServerErrorException;
 import com.smarthealthdog.backend.exceptions.InvalidRequestDataException;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
@@ -71,9 +66,6 @@ public class HealthCertificateServiceUT {
 
     @Mock
     private DiagnosisAttemptLimiter diagnosisAttemptLimiter;
-
-    @Mock
-    private HealthCertificateOcrClient healthCertificateOcrClient;
 
     @Mock
     private HealthCertificateFieldExtractor fieldExtractor;
@@ -128,8 +120,9 @@ public class HealthCertificateServiceUT {
         // 업로드는 커밋 이후 비동기로 일어난다 — 이 메서드는 이벤트 발행까지만 한다.
         verify(fileUploadService).updateDiagnosisImage(pending, imageFile);
 
-        // 백엔드가 Vision 을 직접 부르지 않는다. 추출은 워커 몫이다.
-        verify(healthCertificateOcrClient, never()).extract(any(), anyString());
+        // 백엔드가 Vision 을 직접 부르지 않는다. 추출은 워커 몫이다 — 벤더 클라이언트가
+        // 아예 없으므로 호출 가능성 자체가 구조로 막혀 있다. 여기서는 등록 시점에
+        // 진단서 행이 생기지 않는다는 것만 확인한다.
         verify(petHealthCertificateRepository, never()).save(any());
     }
 
@@ -250,20 +243,6 @@ public class HealthCertificateServiceUT {
             .status(SubmissionStatus.PENDING)
             .submittedAt(Instant.parse("2026-10-03T12:00:00Z"))
             .build();
-    }
-
-    private void givenValidOcrResult() {
-        when(healthCertificateOcrClient.extract(any(), anyString()))
-            .thenReturn(new HealthCertificateOcrResult("진단서\n병명: 심장비대", 0.9124));
-        when(fieldExtractor.looksLikeHealthCertificate(anyString())).thenReturn(true);
-        when(fieldExtractor.extract(any())).thenReturn(
-            PetHealthCertificate.builder()
-                .diseaseName("심장비대, 폐침윤")
-                .diagnosedDateText("2020.10.28")
-                .diagnosedDate(LocalDate.of(2020, 10, 28))
-                .ocrConfidence(BigDecimal.valueOf(0.9124))
-                .build()
-        );
     }
 
     /** 거부된 요청이 아무 흔적도 남기지 않았는지 확인한다. */

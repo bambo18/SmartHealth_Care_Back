@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,10 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.smarthealthdog.backend.clients.ocr.HealthCertificateOcrClient;
 import com.smarthealthdog.backend.domain.Permission;
 import com.smarthealthdog.backend.domain.PermissionEnum;
 import com.smarthealthdog.backend.domain.Pet;
@@ -59,10 +56,6 @@ import com.smarthealthdog.backend.validation.ErrorCode;
 @SpringBootTest
 @ActiveProfiles("test")
 public class HealthCertificateServiceTest {
-
-    /** 실제 Vision 호출은 과금되므로 통합 테스트에서도 외부 클라이언트는 대체한다. */
-    @MockitoBean
-    private HealthCertificateOcrClient healthCertificateOcrClient;
 
     @Autowired
     private HealthCertificateService healthCertificateService;
@@ -190,13 +183,13 @@ public class HealthCertificateServiceTest {
         assertEquals(petId, accepted.petId());
         assertEquals(SubmissionStatus.PENDING, accepted.status());
 
-        // 비동기 경로다 — 등록 시점에는 추출 결과가 없고 백엔드가 OCR 을 부르지도 않는다.
+        // 비동기 경로다 — 등록 시점에는 추출 결과가 없다. 백엔드에 OCR 벤더 클라이언트
+        // 자체가 없으므로 "부르지 않는다"는 런타임 검증이 아니라 구조로 보장된다.
         Submission submission = submissionRepository.findById(accepted.submissionId()).orElseThrow();
         assertEquals(SubmissionStatus.PENDING, submission.getStatus());
         assertEquals(SubmissionTypeEnum.HEALTH_CERTIFICATE, submission.getType());
         assertNull(submission.getCompletedAt());
         assertEquals(0, petHealthCertificateRepository.count());
-        verifyNoInteractions(healthCertificateOcrClient);
     }
 
     @Test

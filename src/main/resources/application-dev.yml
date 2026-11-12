@@ -220,16 +220,8 @@ upload:
 
 # 건강검진표(진단서) OCR 설정
 ocr:
-  google:
-    # GCP 콘솔에서 Cloud Vision API를 활성화한 뒤 발급한 API 키.
-    # 반드시 "API 제한"에서 Cloud Vision API만 허용하도록 제한한다.
-    api-key: ${GOOGLE_VISION_API_KEY}
-    endpoint: https://vision.googleapis.com/v1/images:annotate
-    # 한국어 진단서이므로 languageHints로 ko를 명시한다.
-    language-hint: ko
-    connect-timeout-seconds: 10
-    read-timeout-seconds: 15
-
+  # Vision 호출은 AI 워커가 한다. 백엔드는 큐에 태스크만 넣고 결과를 콜백으로 받으므로
+  # 벤더 API 키를 들고 있지 않는다. 워커 측 인증은 SPEC §14-6(ADC) 참고.
   certificate:
     min-confidence: 0.75
 

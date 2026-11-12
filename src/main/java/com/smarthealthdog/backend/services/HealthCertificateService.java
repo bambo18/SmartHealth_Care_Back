@@ -14,7 +14,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.smarthealthdog.backend.clients.ocr.HealthCertificateFieldExtractor;
-import com.smarthealthdog.backend.clients.ocr.HealthCertificateOcrClient;
 import com.smarthealthdog.backend.domain.Pet;
 import com.smarthealthdog.backend.domain.PetHealthCertificate;
 import com.smarthealthdog.backend.domain.Submission;
@@ -54,16 +53,16 @@ public class HealthCertificateService {
     private final SubmissionService submissionService;
     private final FileUploadService fileUploadService;
     private final DiagnosisAttemptLimiter diagnosisAttemptLimiter;
-    private final HealthCertificateOcrClient healthCertificateOcrClient;
     private final HealthCertificateFieldExtractor fieldExtractor;
     private final PetHealthCertificateRepository petHealthCertificateRepository;
     private final ImageUploader imageUploader;
     private final ImgUtils imgUtils;
 
     /**
-     * 외부 HTTP 호출을 트랜잭션 밖에 두기 위해 저장 구간만 명시적으로 묶는다.
-     * 진입 메서드에 @Transactional 을 붙이면 OCR 응답을 기다리는 동안(최대 15초)
-     * DB 커넥션을 점유해 커넥션 풀이 빠르게 고갈된다.
+     * 저장 구간만 좁게 묶기 위해 쓴다.
+     *
+     * 백엔드가 OCR 을 직접 부르지 않게 되면서(비동기 전환) "외부 응답을 기다리는 동안
+     * DB 커넥션을 점유한다"는 원래 위험은 사라졌다. 트랜잭션을 좁히는 목적만 남았다.
      */
     private final TransactionTemplate transactionTemplate;
 
