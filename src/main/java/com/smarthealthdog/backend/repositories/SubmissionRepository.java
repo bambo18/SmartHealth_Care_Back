@@ -18,6 +18,7 @@ import com.smarthealthdog.backend.domain.Pet;
 import com.smarthealthdog.backend.domain.Submission;
 import com.smarthealthdog.backend.domain.SubmissionFailureReasonEnum;
 import com.smarthealthdog.backend.domain.SubmissionStatus;
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 
 import jakarta.transaction.Transactional;
 
@@ -40,6 +41,15 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
     );
     Page<Submission> findByStatusAndSubmittedAtLessThanEqualOrderBySubmittedAtAsc(
         SubmissionStatus status, Instant submittedAt, Pageable pageable);
+
+    /**
+     * 응답이 지연된 제출을 찾는다. 기준은 <b>PROCESSING 진입 시각</b>이다.
+     *
+     * 제출 시각(submittedAt)으로 재면 재시도해도 값이 바뀌지 않아, 한 번 기준선을
+     * 넘은 뒤로는 조건이 영구히 참이 된다.
+     */
+    Page<Submission> findByStatusAndProcessingStartedAtLessThanEqualOrderByProcessingStartedAtAsc(
+        SubmissionStatus status, Instant processingStartedAt, Pageable pageable);
     List<Submission> findFirst100ByStatusOrderBySubmittedAtAsc(SubmissionStatus status);
     List<Submission> findFirst100ByStatusAndPhotoUrlIsNotOrderBySubmittedAtAsc(SubmissionStatus status, String photoUrl);
 
@@ -52,9 +62,30 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
     @Query("UPDATE Submission s SET s.status = :newStatus WHERE s.id IN :submissionIds")
     int updateStatusByIds(@Param("newStatus") SubmissionStatus newStatus, @Param("submissionIds") List<UUID> submissionIds);
 
+    /**
+     * 큐에 실은 제출을 PROCESSING 으로 바꾸면서 진입 시각을 함께 기록한다.
+     *
+     * 재적재할 때마다 시각이 갱신되어야 시도마다 타임아웃 시계가 새로 돈다.
+     * 상태만 바꾸는 {@link #updateStatusByIds} 와 분리해 둔 이유다 — 그쪽은
+     * DELETED 전환에도 쓰이므로 시각을 건드리면 안 된다.
+     *
+     * @param startedAt PROCESSING 진입 시각
+     * @param submissionIds 대상 제출 ID 목록
+     * @return 갱신된 행 수
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Submission s SET s.status = com.smarthealthdog.backend.domain.SubmissionStatus.PROCESSING, "
+        + "s.processingStartedAt = :startedAt WHERE s.id IN :submissionIds")
+    int markProcessingByIds(@Param("startedAt") Instant startedAt, @Param("submissionIds") List<UUID> submissionIds);
+
     Page<Submission> findAll(Specification<Submission> spec, Pageable pageable);
     Optional<Submission> findById(UUID id);
     Optional<Submission> findTopByPetOrderBySubmittedAtDesc(Pet pet);
+
+    // 유형을 가리지 않는 위 쿼리는 제출 유형 사이에 교차 간섭을 만든다.
+    // 빈도 제한은 같은 유형끼리만 비교해야 한다.
+    Optional<Submission> findTopByPetAndTypeOrderBySubmittedAtDesc(Pet pet, SubmissionTypeEnum type);
 
     // Create a custom query that fetches Submission with Pet with User eagerly
     @Query("SELECT s FROM Submission s JOIN FETCH s.pet p JOIN FETCH p.owner u WHERE s.id = :id")

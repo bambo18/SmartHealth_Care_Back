@@ -23,6 +23,9 @@ public class DevImgUtils implements ImgUtils {
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
 
+    /** TTL 을 지정하지 않는 기존 호출부가 쓰던 기본 유효 기간. */
+    private static final Duration DEFAULT_TTL = Duration.ofHours(1);
+
     /**
      * dev 환경에서도 S3Uploader가 이미지를 OVH S3에 저장하므로,
      * 프론트에는 /uploads/... 로컬 주소가 아니라
@@ -30,7 +33,7 @@ public class DevImgUtils implements ImgUtils {
      */
     @Override
     public String getImgUrl(String key) {
-        return createPresignedUrl(key);
+        return createPresignedUrl(key, DEFAULT_TTL);
     }
 
     /**
@@ -38,13 +41,21 @@ public class DevImgUtils implements ImgUtils {
      */
     @Override
     public String getImgUrlForAIWorker(String key) {
-        return createPresignedUrl(key);
+        return getSecureImgUrl(key, DEFAULT_TTL);
     }
 
     /**
-     * S3 key를 1시간 동안 접근 가능한 presigned URL로 변환한다.
+     * 지정한 기간 동안만 유효한 presigned URL을 반환한다.
      */
-    private String createPresignedUrl(String key) {
+    @Override
+    public String getSecureImgUrl(String key, Duration ttl) {
+        return createPresignedUrl(key, ttl);
+    }
+
+    /**
+     * S3 key를 지정한 기간 동안 접근 가능한 presigned URL로 변환한다.
+     */
+    private String createPresignedUrl(String key, Duration ttl) {
         if (key == null || key.isBlank()) {
             return null;
         }
@@ -55,7 +66,7 @@ public class DevImgUtils implements ImgUtils {
                 .build();
 
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofHours(1))
+                .signatureDuration(ttl)
                 .getObjectRequest(getObjectRequest)
                 .build();
 

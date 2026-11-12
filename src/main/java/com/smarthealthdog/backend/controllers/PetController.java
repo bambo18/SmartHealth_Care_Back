@@ -25,8 +25,10 @@ import com.smarthealthdog.backend.dto.CreatePetRequest;
 import com.smarthealthdog.backend.dto.PartialUpdatePetRequest;
 import com.smarthealthdog.backend.dto.PetResponse;
 import com.smarthealthdog.backend.dto.UpdatePetRequest;
+import com.smarthealthdog.backend.dto.health.CertificateSubmissionAccepted;
 import com.smarthealthdog.backend.exceptions.ResourceNotFoundException;
 import com.smarthealthdog.backend.services.AIDiagnosisClientService;
+import com.smarthealthdog.backend.services.HealthCertificateService;
 import com.smarthealthdog.backend.services.PetService;
 import com.smarthealthdog.backend.utils.ImgUtils;
 import com.smarthealthdog.backend.validation.ErrorCode;
@@ -41,6 +43,7 @@ public class PetController {
 
     private final PetService petService;
     private final AIDiagnosisClientService aiDiagnosisClientService;
+    private final HealthCertificateService healthCertificateService;
 
     /**
      * PetResponse를 만들 때 DB에 저장된 S3 key를
@@ -175,5 +178,28 @@ public class PetController {
         aiDiagnosisClientService.performUrineDiagnosis(image, id, ownerId);
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /**
+     * 건강검진표(진단서) 이미지 제출
+     *
+     * 비동기 처리다 — 접수만 하고 바로 응답한다. 추출은 AI 워커가 하고 결과는 콜백으로 들어온다.
+     * 눈·소변과 달리 생성된 submission_id 를 응답에 담는다. 프론트는 이 ID 로
+     * {@code GET /api/submissions/{id}/certificate} 를 조회해 완료 여부를 확인한다.
+     *
+     * 202 인 이유는 제출은 만들어졌지만 처리가 끝나지 않았기 때문이다.
+     */
+    @PostMapping("/{id}/submissions/certificate")
+    @PreAuthorize("hasAuthority('can_use_health_check')")
+    public ResponseEntity<CertificateSubmissionAccepted> addHealthCertificate(
+            @PathVariable Long id,
+            @RequestPart(value = "image") MultipartFile image,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long ownerId = Long.parseLong(userDetails.getUsername());
+
+        CertificateSubmissionAccepted accepted = healthCertificateService.register(image, id, ownerId);
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(accepted);
     }
 }

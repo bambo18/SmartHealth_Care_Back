@@ -21,13 +21,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.dto.diagnosis.get.DiagnosisResult;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionDetail;
 import com.smarthealthdog.backend.dto.diagnosis.get.SubmissionPage;
 import com.smarthealthdog.backend.dto.diagnosis.get.UrineMeasurementResult;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionResultRequest;
+import com.smarthealthdog.backend.dto.diagnosis.update.CertificateOcrResultRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionStatusUpdateRequest;
 import com.smarthealthdog.backend.dto.diagnosis.update.SubmissionUrineTestUpdateRequest;
+import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
+import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
+import com.smarthealthdog.backend.dto.health.UpdateHealthCertificateRequest;
+import com.smarthealthdog.backend.services.HealthCertificateService;
 import com.smarthealthdog.backend.services.SubmissionService;
 
 import jakarta.validation.Valid;
@@ -38,6 +44,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SubmissionController {
     private final SubmissionService submissionService;
+    private final HealthCertificateService healthCertificateService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('can_view_own_health_records')")
@@ -47,6 +54,7 @@ public class SubmissionController {
             @RequestParam(value = "submittedTo", required = false) Instant submittedTo,
             @RequestParam(value = "completedFrom", required = false) Instant completedFrom,
             @RequestParam(value = "completedTo", required = false) Instant completedTo,
+            @RequestParam(value = "type", required = false) SubmissionTypeEnum type,
             @PageableDefault(
                 page = 0,
                 size = 15
@@ -65,6 +73,7 @@ public class SubmissionController {
                 submittedTo,
                 completedFrom,
                 completedTo,
+                type,
                 pageable
             )
         );
@@ -78,6 +87,7 @@ public class SubmissionController {
             @RequestParam(value = "submittedTo", required = false) Instant submittedTo,
             @RequestParam(value = "completedFrom", required = false) Instant completedFrom,
             @RequestParam(value = "completedTo", required = false) Instant completedTo,
+            @RequestParam(value = "type", required = false) SubmissionTypeEnum type,
             @PageableDefault(
                 page = 0,
                 size = 15
@@ -98,6 +108,7 @@ public class SubmissionController {
                 submittedTo, 
                 completedFrom, 
                 completedTo, 
+                type,
                 pageable
             )
         );
@@ -153,6 +164,64 @@ public class SubmissionController {
     ) {
         Long userId = Long.parseLong(userDetails.getUsername());
         return ResponseEntity.ok(submissionService.getSubmissionAndUrineMeasurementsById(submissionId, languageCode, userId));
+    }
+
+    /** 건강검진표(진단서) 상세 조회 */
+    @GetMapping("/{id}/certificate")
+    @PreAuthorize("hasAuthority('can_view_own_health_records')")
+    public ResponseEntity<SubmissionDetail<HealthCertificateResult>> getCertificateSubmissionById(
+            @PathVariable("id") UUID submissionId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(submissionService.getSubmissionAndCertificateById(submissionId, userId));
+    }
+
+    /** 건강검진표(진단서) 수정 — OCR 오인식 보정용. 전달된 필드만 반영한다. */
+    @PatchMapping("/{id}/certificate")
+    @PreAuthorize("hasAuthority('can_use_health_check')")
+    public ResponseEntity<HealthCertificateResult> updateCertificate(
+            @PathVariable("id") UUID submissionId,
+            @Valid @RequestBody UpdateHealthCertificateRequest request,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(healthCertificateService.update(submissionId, userId, request));
+    }
+
+    /**
+     * 건강검진표(진단서) OCR 결과 수신 — AI 워커 콜백
+     *
+     * 경로가 {@code /certificate} 가 아니라 {@code /certificate/result} 인 이유는
+     * 위의 사용자 수정 엔드포인트가 이미 {@code /certificate} 를 쓰기 때문이다.
+     * 권한도 다르다 — 수정은 사용자(can_use_health_check), 이쪽은 AI 서비스 계정이다.
+     *
+     * 인식 규칙에 걸려 제출이 실패로 끝나도 200 을 돌려준다. 워커는 보고를 제대로 한
+     * 것이고, 4xx 를 주면 같은 작업을 재시도하기 때문이다.
+     */
+    @PatchMapping("/{id}/certificate/result")
+    @PreAuthorize("hasAuthority('can_update_health_records')")
+    public ResponseEntity<Void> receiveCertificateOcrResult(
+            @PathVariable("id") UUID submissionId,
+            @Valid @RequestBody CertificateOcrResultRequest request
+    ) {
+        healthCertificateService.applyOcrResult(submissionId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 제출 원본 이미지의 단기 서명 URL 조회
+     *
+     * 리다이렉트가 아니라 JSON 으로 돌려준다 — 프론트가 만료를 알고 재요청 시점을 판단해야 한다.
+     */
+    @GetMapping("/{id}/image")
+    @PreAuthorize("hasAuthority('can_view_own_health_records')")
+    public ResponseEntity<ImageUrlResponse> getSubmissionImageUrl(
+            @PathVariable("id") UUID submissionId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        Long userId = Long.parseLong(userDetails.getUsername());
+        return ResponseEntity.ok(healthCertificateService.getImageUrl(submissionId, userId));
     }
 
     @DeleteMapping("/{id}")

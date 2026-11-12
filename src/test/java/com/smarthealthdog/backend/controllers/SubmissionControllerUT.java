@@ -14,18 +14,21 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.smarthealthdog.backend.services.HealthCertificateService;
 import com.smarthealthdog.backend.services.SubmissionService;
 
 class SubmissionControllerUT {
 
     private SubmissionService submissionService;
+    private HealthCertificateService healthCertificateService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         submissionService = mock(SubmissionService.class);
+        healthCertificateService = mock(HealthCertificateService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                new SubmissionController(submissionService)
+                new SubmissionController(submissionService, healthCertificateService)
         ).build();
     }
 
