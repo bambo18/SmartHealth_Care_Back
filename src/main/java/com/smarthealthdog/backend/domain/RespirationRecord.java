@@ -116,6 +116,40 @@ public class RespirationRecord {
         this.status = RespirationStatus.COMPLETED;
     }
 
+    /**
+     * AI team's two-step callback: save BPM while keeping PROCESSING.
+     * Only positive integral BPM values supported by numeric(6,2) are accepted.
+     */
+    public void saveMeasuredRate(BigDecimal rate) {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (rate == null || rate.signum() <= 0 ||
+                rate.compareTo(BigDecimal.valueOf(9999)) > 0 ||
+                rate.stripTrailingZeros().scale() > 0) {
+            throw new IllegalArgumentException("Respiratory rate must be a positive integer up to 9999");
+        }
+        if (this.respiratoryRate != null && this.respiratoryRate.compareTo(rate) != 0) {
+            throw new IllegalStateException("Conflicting respiratory rate already saved");
+        }
+        this.respiratoryRate = rate;
+        this.failureReason = null;
+        // completedAt and status are intentionally unchanged until a second PATCH.
+    }
+
+    /** Complete a two-step callback after a rate has been saved. */
+    public void markCompletedFromSavedRate() {
+        if (status != RespirationStatus.PROCESSING) {
+            throw new IllegalStateException("Respiration record is not PROCESSING: " + status);
+        }
+        if (respiratoryRate == null) {
+            throw new IllegalStateException("Cannot complete respiration without a saved respiratory rate");
+        }
+        this.failureReason = null;
+        this.completedAt = Instant.now();
+        this.status = RespirationStatus.COMPLETED;
+    }
+
     // A failed inference does not produce a respiratory rate.
     public void markInferenceFailed(String reason) {
         if (status != RespirationStatus.PROCESSING) {
