@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
+/** AI contract: respiratoryRate must be a positive integer BPM. */
 public record RespirationWorkerResultRequest(
-    @NotNull @DecimalMin("0.01") @Digits(integer = 4, fraction = 2) BigDecimal respiratoryRate
+    @NotNull @DecimalMin("1") @Digits(integer = 4, fraction = 0) BigDecimal respiratoryRate
 ) {}

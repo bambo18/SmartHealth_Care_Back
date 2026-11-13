@@ -21,7 +21,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @RequiredArgsConstructor
 public class RespirationVideoStorageService {
 
-    private static final long MAX_VIDEO_BYTES = 30L * 1024 * 1024;
+    private static final long MAX_VIDEO_BYTES = 200L * 1024 * 1024;
     private static final String VIDEO_CONTENT_TYPE = "video/mp4";
 
     private final S3Client s3Client;
@@ -70,7 +70,7 @@ public class RespirationVideoStorageService {
 
         if (size <= 0 || size > MAX_VIDEO_BYTES) {
             throw new IllegalArgumentException(
-                "Video size must be between 1 byte and 30 MB"
+                "Video size must be between 1 byte and 200 MiB"
             );
         }
 
