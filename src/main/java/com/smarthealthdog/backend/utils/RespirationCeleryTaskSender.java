@@ -22,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 @Component
 @RequiredArgsConstructor
 public class RespirationCeleryTaskSender {
-    private static final String QUEUE = "celery";
+    private static final String QUEUE = "respiration";
 
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
@@ -87,7 +87,7 @@ public class RespirationCeleryTaskSender {
                     .build();
 
             Long queueLength = redis.opsForList().rightPush(QUEUE, mapper.writeValueAsString(message));
-            if (queueLength == null) {
+            if (queueLength == null) {  
                 throw new IllegalStateException("Redis did not acknowledge task insertion");
             }
         } catch (JsonProcessingException ex) {
@@ -95,3 +95,4 @@ public class RespirationCeleryTaskSender {
         }
     }
 }
+
