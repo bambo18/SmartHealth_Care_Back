@@ -40,8 +40,9 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
      * 워커의 실제 태스크 이름과 한 글자라도 다르면 메시지는 큐에 정상적으로 들어가지만
      * 워커가 "모르는 작업"으로 버린다 — 양쪽 로그만 봐서는 원인을 찾기 어렵다.
      */
-    private static final String HEALTH_CERTIFICATE_OCR_TASK_NAME = "smart_health_dog_disease_detection.extract_health_certificate_text";
-    private static final String CELERY_QUEUE_NAME = "celery"; 
+    private static final String HEALTH_CERTIFICATE_OCR_TASK_NAME = "predict_certificate_ocr";
+    private static final String CELERY_QUEUE_NAME = "celery";
+    private static final String OCR_CELERY_QUEUE_NAME = "ocr"; 
 
     @Autowired
     public CeleryTaskSender(StringRedisTemplate stringRedisTemplate, SubmissionRepository submissionRepository) {
@@ -59,7 +60,8 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
                         return generateCeleryMessage(
                             data.imageUrl(),
                             data.submission().getId(),
-                            resolveTaskName(data.submission())
+                            resolveTaskName(data.submission()),
+                            resolveQueueName(data.submission())
                         );
                     } catch (JsonProcessingException e) {
                         throw new RuntimeException(e);
@@ -76,7 +78,24 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
             }
 
             submissionRepository.saveAll(submissions);
-            stringRedisTemplate.opsForList().rightPushAll(CELERY_QUEUE_NAME, celeryMessages);
+            // Keep eye/urine tasks on the existing queue. Route certificate OCR
+            // exclusively to the dedicated OCR queue, preserving task order.
+            List<String> diagnosisMessages = new ArrayList<>();
+            List<String> ocrMessages = new ArrayList<>();
+            for (int i = 0; i < requestDataList.size(); i++) {
+                Submission submission = requestDataList.get(i).submission();
+                if (submission.getType() == com.smarthealthdog.backend.domain.SubmissionTypeEnum.HEALTH_CERTIFICATE) {
+                    ocrMessages.add(celeryMessages.get(i));
+                } else {
+                    diagnosisMessages.add(celeryMessages.get(i));
+                }
+            }
+            if (!diagnosisMessages.isEmpty()) {
+                stringRedisTemplate.opsForList().rightPushAll(CELERY_QUEUE_NAME, diagnosisMessages);
+            }
+            if (!ocrMessages.isEmpty()) {
+                stringRedisTemplate.opsForList().rightPushAll(OCR_CELERY_QUEUE_NAME, ocrMessages);
+            }
         } catch (Exception e) {
             // TODO: Connect to Sentry or logging system and log the exception
             throw e;
@@ -88,6 +107,7 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
         try {
             for (String taskString : celeryTaskStrings) {
                 stringRedisTemplate.opsForList().remove(CELERY_QUEUE_NAME, 1, taskString);
+                stringRedisTemplate.opsForList().remove(OCR_CELERY_QUEUE_NAME, 1, taskString);
             }
         } catch (Exception e) {
             // TODO: Connect to Sentry or logging system and log the exception
@@ -113,6 +133,11 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
         };
     }
 
+    private String resolveQueueName(Submission submission) {
+        return submission.getType() == com.smarthealthdog.backend.domain.SubmissionTypeEnum.HEALTH_CERTIFICATE
+            ? OCR_CELERY_QUEUE_NAME : CELERY_QUEUE_NAME;
+    }
+
     /**
      * 파이썬 Celery 작업 메시지를 생성합니다.
      *
@@ -126,14 +151,14 @@ public class CeleryTaskSender implements DiagnosisTaskRequestClient {
      * @throws JsonProcessingException 직렬화 실패 시
      */
     private String generateCeleryMessage(
-        String imagePath, UUID submissionId, String taskName
+        String imagePath, UUID submissionId, String taskName, String queueName
     ) throws JsonProcessingException {
         String taskId = UUID.randomUUID().toString();
         String payloadBase64 = generateCeleryBody(imagePath, submissionId);
 
         DeliveryInfo deliveryInfo = DeliveryInfo.builder()
             .exchange("") // Default exchange
-            .routingKey(CELERY_QUEUE_NAME)
+            .routingKey(queueName)
             .build();
 
         MessageProperties properties = MessageProperties.builder()

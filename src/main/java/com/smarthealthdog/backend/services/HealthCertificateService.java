@@ -22,6 +22,7 @@ import com.smarthealthdog.backend.domain.SubmissionStatus;
 import com.smarthealthdog.backend.domain.SubmissionTypeEnum;
 import com.smarthealthdog.backend.dto.diagnosis.create.SubmissionImageUploadEvent;
 import com.smarthealthdog.backend.dto.diagnosis.update.CertificateOcrResultRequest;
+import com.smarthealthdog.backend.dto.diagnosis.update.CertificateOcrFieldsDto;
 import com.smarthealthdog.backend.dto.health.CertificateSubmissionAccepted;
 import com.smarthealthdog.backend.dto.health.HealthCertificateResult;
 import com.smarthealthdog.backend.dto.health.ImageUrlResponse;
@@ -275,7 +276,10 @@ public class HealthCertificateService {
 
         PetHealthCertificate certificate;
         try {
-            certificate = evaluate(new HealthCertificateOcrResult(request.getRawText(), confidenceForGate));
+            certificate = evaluate(
+                new HealthCertificateOcrResult(request.getRawText(), confidenceForGate),
+                request.getFields()
+            );
         } catch (InvalidRequestDataException e) {
             // 인식 규칙 위반은 요청 오류가 아니라 "이 제출의 결과"다.
             fail(submission, toFailureReason(e.getErrorCode()));
@@ -367,7 +371,7 @@ public class HealthCertificateService {
      *
      * 이 메서드가 저장 단계보다 앞에 있다는 사실이 "인식 실패 시 업로드 불가"의 전부다.
      */
-    private PetHealthCertificate evaluate(HealthCertificateOcrResult ocrResult) {
+    private PetHealthCertificate evaluate(HealthCertificateOcrResult ocrResult, CertificateOcrFieldsDto fields) {
         if (!fieldExtractor.looksLikeHealthCertificate(ocrResult.fullText())) {
             throw new InvalidRequestDataException(ErrorCode.NOT_A_HEALTH_CERTIFICATE);
         }
@@ -378,13 +382,53 @@ public class HealthCertificateService {
 
         PetHealthCertificate certificate = fieldExtractor.extract(ocrResult);
 
-        // 병명과 진단 연원일(원문)만 필수다. 나머지 10개 항목은 비어도 등록을 허용하고
+        // The Python parser uses OCR geometry. Prefer its nonblank fields over
+        // line-based Java fallback extraction, then validate mandatory fields.
+        applyWorkerFields(certificate, fields);
+
+        // 병명과 진단 연월일(원문)만 필수다. 나머지 항목은 비어도 등록을 허용하고
         // 수정 화면에서 사용자가 채운다.
         if (isBlank(certificate.getDiseaseName()) || isBlank(certificate.getDiagnosedDateText())) {
             throw new InvalidRequestDataException(ErrorCode.OCR_REQUIRED_FIELD_MISSING);
         }
 
         return certificate;
+    }
+
+    /** Overlay only confidently extracted (nonblank) worker fields. */
+    private void applyWorkerFields(PetHealthCertificate c, CertificateOcrFieldsDto f) {
+        if (f == null) {
+            return;
+        }
+        applyIfNotBlank(f.getAnimalName(), c::setAnimalName);
+        applyIfNotBlank(f.getSpeciesText(), c::setSpeciesText);
+        applyIfNotBlank(f.getBreed(), c::setBreed);
+        applyIfNotBlank(f.getGenderText(), c::setGenderText);
+        applyIfNotBlank(f.getCoatColor(), c::setCoatColor);
+        applyIfNotBlank(f.getAgeText(), c::setAgeText);
+        applyIfNotBlank(f.getFeatures(), c::setFeatures);
+        applyIfNotBlank(f.getDiseaseName(), c::setDiseaseName);
+        applyIfNotBlank(f.getPrognosis(), c::setPrognosis);
+        applyIfNotBlank(f.getRemarks(), c::setRemarks);
+        applyIfNotBlank(f.getRegistrationNumber(), c::setRegistrationNumber);
+        applyIfNotBlank(f.getSymptoms(), c::setSymptoms);
+        applyIfNotBlank(f.getTreatment(), c::setTreatment);
+        applyIfNotBlank(f.getHospitalizationDischargeDateText(), c::setHospitalizationDischargeDateText);
+        applyIfNotBlank(f.getDocumentDateText(), c::setDocumentDateText);
+        if (!isBlank(f.getOnsetDateText())) {
+            c.setOnsetDateText(f.getOnsetDateText());
+            c.setOnsetDate(fieldExtractor.parseDate(f.getOnsetDateText()));
+        }
+        if (!isBlank(f.getDiagnosedDateText())) {
+            c.setDiagnosedDateText(f.getDiagnosedDateText());
+            c.setDiagnosedDate(fieldExtractor.parseDate(f.getDiagnosedDateText()));
+        }
+    }
+
+    private void applyIfNotBlank(String value, java.util.function.Consumer<String> setter) {
+        if (!isBlank(value)) {
+            setter.accept(value);
+        }
     }
 
     /**

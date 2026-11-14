@@ -23,8 +23,8 @@ import lombok.Data;
  * <p>성공이면 {@code rawText} 와 {@code confidence} 가 반드시 있어야 하고,
  * 실패면 {@code error} 가 반드시 있어야 한다({@link #isConsistent()}).
  *
- * <p><b>이 규격은 AI 측 회신 전까지 확정이 아니다.</b> 특히 {@code confidence} 제공
- * 여부가 미확정이다 — 자세한 내용은 추적되지 않는 로컬 문서 {@code Notion_AI연동협의.md} §2-1.
+ * <p>이 규격은 Python OCR Worker의 결과 JSON과 일치하도록 정리되었다.
+ * Worker는 성공 시 rawText, confidence, 17개 필드 객체를 함께 전송한다.
  */
 @Data
 public class CertificateOcrResultRequest {
@@ -53,7 +53,7 @@ public class CertificateOcrResultRequest {
     private BigDecimal confidence;
 
     /**
-     * 워커가 뽑아낸 12개 항목. <b>선택.</b>
+     * 워커가 뽑아낸 17개 항목. <b>선택.</b>
      *
      * 생략하면 백엔드가 {@code rawText} 에서 직접 추출한다. 값이 있으면
      * null 이 아닌 항목만 백엔드 추출 결과보다 우선한다.

@@ -24,7 +24,7 @@ import lombok.NoArgsConstructor;
  * 건강검진표(진단서) OCR 등록 결과.
  *
  * 원본 이미지 키는 {@link Submission#getPhotoUrl()} 에 있으므로 이 엔티티에는 두지 않는다.
- * OCR 원응답에는 견주 성명·주소가 포함되므로 화이트리스트한 12개 항목만 보관한다.
+ * OCR 원응답에는 견주 성명·주소가 포함되므로 화이트리스트한 17개 항목만 보관한다.
  */
 @Entity
 @Table(name = "pet_health_certificates")
@@ -102,6 +102,26 @@ public class PetHealthCertificate {
     /** 그외의 사항 (비고) */
     @Column(name = "remarks", columnDefinition = "TEXT")
     private String remarks;
+
+    /** 동물 등록번호 */
+    @Column(name = "registration_number", length = 32)
+    private String registrationNumber;
+
+    /** 주요 증상 */
+    @Column(name = "symptoms", columnDefinition = "TEXT")
+    private String symptoms;
+
+    /** 치료 / 처치 내용 */
+    @Column(name = "treatment", columnDefinition = "TEXT")
+    private String treatment;
+
+    /** 입퇴원 날짜 원문 */
+    @Column(name = "hospitalization_discharge_date_text", length = 128)
+    private String hospitalizationDischargeDateText;
+
+    /** 발급일 / 작성일 원문 */
+    @Column(name = "document_date_text", length = 64)
+    private String documentDateText;
 
     /**
      * OCR 전체 평균 신뢰도. NULL 은 "신뢰도 미상"이며 품질이 낮다는 뜻이 아니다 —
