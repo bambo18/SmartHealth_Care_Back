@@ -386,11 +386,7 @@ public class HealthCertificateService {
         // line-based Java fallback extraction, then validate mandatory fields.
         applyWorkerFields(certificate, fields);
 
-        // 병명과 진단 연월일(원문)만 필수다. 나머지 항목은 비어도 등록을 허용하고
-        // 수정 화면에서 사용자가 채운다.
-        if (isBlank(certificate.getDiseaseName()) || isBlank(certificate.getDiagnosedDateText())) {
-            throw new InvalidRequestDataException(ErrorCode.OCR_REQUIRED_FIELD_MISSING);
-        }
+    
 
         return certificate;
     }
