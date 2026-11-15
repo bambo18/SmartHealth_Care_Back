@@ -180,7 +180,7 @@ ocr:
   # Vision 호출은 AI 워커가 한다. 백엔드는 큐에 태스크만 넣고 결과를 콜백으로 받으므로
   # 벤더 API 키를 들고 있지 않는다. 워커 측 인증은 SPEC §14-6(ADC) 참고.
   certificate:
-    min-confidence: 0.75
+    min-confidence: 0.70
 
   # 사용자 단위 최소 요청 간격(초). 유료 OCR 호출에만 적용된다.
   user-interval:
