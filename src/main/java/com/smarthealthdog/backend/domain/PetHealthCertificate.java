@@ -76,7 +76,7 @@ public class PetHealthCertificate {
     private String features;
 
     /** 병명 (필수) */
-    @Column(name = "disease_name", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "disease_name", columnDefinition = "TEXT")
     private String diseaseName;
 
     /** 발병 연원일 (파싱 성공 시) */
@@ -92,7 +92,7 @@ public class PetHealthCertificate {
     private LocalDate diagnosedDate;
 
     /** 진단 연원일 (원문, 필수) */
-    @Column(name = "diagnosed_date_text", nullable = false, length = 64)
+    @Column(name = "diagnosed_date_text", length = 64)
     private String diagnosedDateText;
 
     /** 예후 소견 */
