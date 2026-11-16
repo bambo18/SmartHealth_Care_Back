@@ -101,7 +101,7 @@ public class ManualHealthCertificateService {
     }
 
     private boolean hasAnyNonblankField(ManualHealthCertificateRequest r) {
-        return nonblank(r.getAnimalName()) || nonblank(r.getSpeciesText())
+        return nonblank(r.getHospitalName()) || nonblank(r.getAnimalName()) || nonblank(r.getSpeciesText())
                 || nonblank(r.getBreed()) || nonblank(r.getGenderText())
                 || nonblank(r.getCoatColor()) || nonblank(r.getAgeText())
                 || nonblank(r.getFeatures()) || nonblank(r.getRegistrationNumber())
@@ -123,7 +123,7 @@ public class ManualHealthCertificateService {
     }
 
     private boolean hasAnyField(ManualHealthCertificateRequest r) {
-        return hasValue(r.getAnimalName()) || hasValue(r.getSpeciesText())
+        return hasValue(r.getHospitalName()) || hasValue(r.getAnimalName()) || hasValue(r.getSpeciesText())
                 || hasValue(r.getBreed()) || hasValue(r.getGenderText())
                 || hasValue(r.getCoatColor()) || hasValue(r.getAgeText())
                 || hasValue(r.getFeatures()) || hasValue(r.getRegistrationNumber())
@@ -140,6 +140,13 @@ public class ManualHealthCertificateService {
 
     /** 필드가 null/생략이면 변경하지 않고, 빈 문자열은 DB NULL로 정리한다. */
     private void apply(ManualHealthCertificateRequest r, PetHealthCertificate c) {
+        if (r.getHospitalName() != null) {
+            String name = normalized(r.getHospitalName());
+            if (name != null && name.length() > 255) {
+                throw new InvalidRequestDataException(ErrorCode.INVALID_INPUT);
+            }
+            c.setHospitalName(name);
+        }
         applyString(r.getAnimalName(), c::setAnimalName);
         applyString(r.getSpeciesText(), c::setSpeciesText);
         applyString(r.getBreed(), c::setBreed);
@@ -183,6 +190,7 @@ public class ManualHealthCertificateService {
         map.put("petId", s.getPet().getId());
         map.put("status", s.getStatus());
         map.put("certificateId", c.getId());
+        map.put("hospitalName", c.getHospitalName());
         map.put("animalName", c.getAnimalName());
         map.put("speciesText", c.getSpeciesText());
         map.put("breed", c.getBreed());

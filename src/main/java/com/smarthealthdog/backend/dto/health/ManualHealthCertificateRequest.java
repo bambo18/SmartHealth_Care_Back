@@ -9,6 +9,8 @@ import lombok.Data;
 @Data
 public class ManualHealthCertificateRequest {
     private String animalName;
+    /** 병원명 (선택) */
+    private String hospitalName;
     private String speciesText;
     private String breed;
     private String genderText;

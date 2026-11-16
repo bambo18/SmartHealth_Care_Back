@@ -123,6 +123,10 @@ public class PetHealthCertificate {
     @Column(name = "document_date_text", length = 64)
     private String documentDateText;
 
+    /** Hospital name (optional) */
+    @Column(name = "hospital_name", length = 255)
+    private String hospitalName;
+
     /**
      * OCR 전체 평균 신뢰도. NULL 은 "신뢰도 미상"이며 품질이 낮다는 뜻이 아니다 —
      * AI 워커가 값을 제공하지 않는 경우다 (V64 에서 NOT NULL 해제).
